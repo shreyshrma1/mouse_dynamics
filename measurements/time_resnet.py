@@ -25,18 +25,40 @@ class ResidualBlock(nn.Module):
         return torch.relu(out)
 
 class ResNetTime(nn.Module):
-    def __init__(self, in_channels=2):
+    def __init__(self, in_channels=2, seq_len=128):
         super().__init__()
-        self.block1 = ResidualBlock(in_channels, 64)
-        self.block2 = ResidualBlock(64, 128)
-        self.block3 = ResidualBlock(128, 128)
-        self.pooling = nn.AdaptiveAveragePool1d(1)
-        self.dense = nn.Linear(128, 2)
+        self.seq_len = seq_len
+        self.encoder = nn.Sequential(
+            ResidualBlock(in_channels, 64),
+            ResidualBlock(64, 128),
+            ResidualBlock(128, 128)
+        )
+        self.pooling = nn.AdaptiveAvgPool1d(1)
+        self.expand = nn.Linear(128, 128 * seq_len)
+        self.decoder = nn.Sequential(
+            ResidualBlock(128, 128),
+            ResidualBlock(128, 64),
+            ResidualBlock(64, in_channels),
+        )
+        
+    def encode(self, x):
+        x = x.permute(0, 2, 1)
+        x = self.encoder(x)          # (B, 128, seq_len)
+        x = self.pooling(x).squeeze(-1) # (B, 128)
+        return x
+    
+    def decode(self, z):
+        x = self.expand(z)                          # (B, 128 * seq_len)
+        x = x.view(-1, 128, self.seq_len)           # (B, 128, seq_len)
+        x = self.decoder(x)                         # (B, in_channels, seq_len)
+        x = x.permute(0, 2, 1)                      # (B, seq_len, in_channels)
+        return x
+    
     def forward(self, x):
-        block1_out = self.block1(x)             # (B, 2, 128) -> (B, 64, 128)
-        block2_out = self.block2(block1_out)    # (B, 64, 128) -> (B, 128, 128)
-        block3_out = self.block3(block2_out)    # (B, 128, 128) -> (B, 128, 128)
-        pool_out = self.pooling(block3_out)     # (B, 128, 128) -> (B, 128, 1)
-        pool_out = pool_out.squeeze(-1)         # (B, 128, 1) -> (B, 128)
-        out = self.dense(pool_out)              # (B, 128) -> (B, 2)
-        return out
+        z = self.encode(x)
+        return self.decode(z)
+    
+    def reconstruction_error(self, x):
+        x_recon = self.forward(x)
+        error = ((x - x_recon) ** 2).mean(dim=[1, 2])
+        return error

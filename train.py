@@ -7,6 +7,9 @@ import os
 import joblib
 
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import roc_curve, auc
+from scipy.optimize import brentq
+from scipy.interpolate import interp1d
 from measurements.model import DynamicsClassifier, preprocess_data
 
 from util.settings import *
@@ -16,11 +19,6 @@ from util.utils import datasetname, create_userids, keeporder_split
 
 
 def build_binary_dataset(dataset, target_user):
-    """
-    For a given target user, label their samples as 1 (legitimate)
-    and all other users' samples as 0 (impostor).
-    Balances the dataset so impostor samples == legitimate samples.
-    """
     num_features = dataset.shape[1]
     x = dataset.iloc[:, 0: num_features - 1].values
     userids = dataset["userid"].values
@@ -31,7 +29,6 @@ def build_binary_dataset(dataset, target_user):
     x_legit = x[legitimate_mask]
     x_impostor = x[impostor_mask]
 
-    # balance: randomly sample impostors to match legitimate count (fixed seed for reproducibility)
     n_legit = len(x_legit)
     rng = np.random.RandomState(0)
     impostor_indices = rng.choice(len(x_impostor), size=n_legit, replace=False)
@@ -41,6 +38,26 @@ def build_binary_dataset(dataset, target_user):
     y_combined = np.array([1] * n_legit + [0] * n_legit)
 
     return x_combined, y_combined
+
+
+def compute_auc_and_threshold(y_true, y_scores):
+    """
+    Compute AUC and find the optimal threshold using EER,
+    matching the same method used by the Random Forest baseline.
+    Returns auc_score, eer_threshold, fpr, tpr.
+    """
+    fpr, tpr, thresholds = roc_curve(y_true, y_scores)
+    auc_score = auc(fpr, tpr)
+
+    # find EER threshold — the point where FAR == FRR
+    # brentq finds the root of (1 - tpr) - fpr = 0
+    try:
+        eer = brentq(lambda x: 1. - x - interp1d(fpr, tpr)(x), 0., 1.)
+        eer_threshold = float(interp1d(fpr, thresholds)(eer))
+    except (ValueError, ZeroDivisionError):
+        eer_threshold = 0.5  # fallback if EER can't be computed
+
+    return auc_score, eer_threshold, fpr, tpr
 
 
 def train_model(current_dataset, dataset_amount, num_actions, num_training_actions,
@@ -94,16 +111,24 @@ def train_model(current_dataset, dataset_amount, num_actions, num_training_actio
         with torch.no_grad():
             val_logits = model(x_val_t)
             val_loss = loss_func(val_logits, y_val_t)
-            val_preds = (torch.sigmoid(val_logits) >= 0.5).float()
-            val_acc = (val_preds == y_val_t).float().mean()
 
-            # per-class metrics
-            tp = ((val_preds == 1) & (y_val_t == 1)).sum().item()
-            fp = ((val_preds == 1) & (y_val_t == 0)).sum().item()
-            fn = ((val_preds == 0) & (y_val_t == 1)).sum().item()
-            tn = ((val_preds == 0) & (y_val_t == 0)).sum().item()
-            far = fp / (fp + tn) if (fp + tn) > 0 else 0  # false acceptance rate
-            frr = fn / (fn + tp) if (fn + tp) > 0 else 0  # false rejection rate
+            # get probabilities for AUC computation
+            y_scores = torch.sigmoid(val_logits).squeeze(1).numpy()
+            y_true = y_val_t.squeeze(1).numpy()
+
+            # compute AUC and EER threshold
+            auc_score, eer_threshold, _, _ = compute_auc_and_threshold(y_true, y_scores)
+
+            # use EER threshold for accuracy/FAR/FRR — matches Random Forest baseline
+            val_preds = (y_scores >= eer_threshold).astype(float)
+            val_acc = (val_preds == y_true).mean()
+
+            tp = ((val_preds == 1) & (y_true == 1)).sum()
+            fp = ((val_preds == 1) & (y_true == 0)).sum()
+            fn = ((val_preds == 0) & (y_true == 1)).sum()
+            tn = ((val_preds == 0) & (y_true == 0)).sum()
+            far = fp / (fp + tn) if (fp + tn) > 0 else 0.0
+            frr = fn / (fn + tp) if (fn + tp) > 0 else 0.0
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
@@ -114,13 +139,14 @@ def train_model(current_dataset, dataset_amount, num_actions, num_training_actio
               f"| Train Loss: {epoch_loss / (x_train_t.size(0) // batch_size):.4f} "
               f"| Val Loss: {val_loss:.4f} "
               f"| Val Acc: {val_acc:.4f} "
+              f"| AUC: {auc_score:.4f} "
+              f"| EER Threshold: {eer_threshold:.4f} "
               f"| FAR: {far:.4f} | FRR: {frr:.4f}")
 
     return scaler, model
 
 
 def train_all_users(current_dataset, dataset_amount, num_actions, num_training_actions):
-    """Train one binary classifier per user."""
     filename = FEAT_DIR + '/' + datasetname(current_dataset, dataset_amount, num_training_actions)
     dataset = pd.read_csv(filename)
     userids = list(create_userids(current_dataset))
@@ -156,46 +182,63 @@ def evaluate_model(target_user, current_dataset, dataset_amount, num_training_ac
 
     scaler = joblib.load(scaler_path)
     x_val_t = torch.FloatTensor(scaler.transform(x_val))
-    y_val_t = torch.FloatTensor(y_val).unsqueeze(1)
+    y_true = y_val.astype(float)
 
     model = DynamicsClassifier()
     model.load_state_dict(torch.load(checkpoint_path, weights_only=True))
     model.eval()
 
     with torch.no_grad():
-        preds = (torch.sigmoid(model(x_val_t)) >= 0.5).float()
-        acc = (preds == y_val_t).float().mean().item()
-        tp = ((preds == 1) & (y_val_t == 1)).sum().item()
-        fp = ((preds == 1) & (y_val_t == 0)).sum().item()
-        fn = ((preds == 0) & (y_val_t == 1)).sum().item()
-        tn = ((preds == 0) & (y_val_t == 0)).sum().item()
-        far = fp / (fp + tn) if (fp + tn) > 0 else 0.0
-        frr = fn / (fn + tp) if (fn + tp) > 0 else 0.0
+        val_logits = model(x_val_t)
+        y_scores = torch.sigmoid(val_logits).squeeze(1).numpy()
 
-    return {'accuracy': acc, 'FAR': far, 'FRR': frr, 'TP': tp, 'FP': fp, 'FN': fn, 'TN': tn}
+    # compute AUC and EER threshold
+    auc_score, eer_threshold, fpr, tpr = compute_auc_and_threshold(y_true, y_scores)
+
+    # apply EER threshold for accuracy/FAR/FRR
+    preds = (y_scores >= eer_threshold).astype(float)
+    acc = (preds == y_true).mean()
+    tp = ((preds == 1) & (y_true == 1)).sum()
+    fp = ((preds == 1) & (y_true == 0)).sum()
+    fn = ((preds == 0) & (y_true == 1)).sum()
+    tn = ((preds == 0) & (y_true == 0)).sum()
+    far = fp / (fp + tn) if (fp + tn) > 0 else 0.0
+    frr = fn / (fn + tp) if (fn + tp) > 0 else 0.0
+
+    return {
+        'accuracy': acc,
+        'AUC': auc_score,
+        'EER_threshold': eer_threshold,
+        'FAR': far,
+        'FRR': frr,
+        'TP': tp, 'FP': fp, 'FN': fn, 'TN': tn,
+        'fpr': fpr, 'tpr': tpr  # kept for plotting ROC curves later
+    }
 
 
 def evaluate_all_users(current_dataset, dataset_amount, num_training_actions):
     userids = list(create_userids(current_dataset))
-    print(f"\n{'User':<10} {'Accuracy':>10} {'FAR':>8} {'FRR':>8}")
-    print('-' * 40)
-    accs, fars, frrs = [], [], []
+    print(f"\n{'User':<10} {'Accuracy':>10} {'AUC':>8} {'EER Thr':>10} {'FAR':>8} {'FRR':>8}")
+    print('-' * 58)
+    accs, aucs, fars, frrs = [], [], [], []
     for user in userids:
         result = evaluate_model(user, current_dataset, dataset_amount, num_training_actions)
         if result is None:
-            print(f"{str(user):<10} {'(no checkpoint)':>28}")
+            print(f"{str(user):<10} {'(no checkpoint)':>46}")
             continue
         accs.append(result['accuracy'])
+        aucs.append(result['AUC'])
         fars.append(result['FAR'])
         frrs.append(result['FRR'])
-        print(f"{str(user):<10} {result['accuracy']:>10.4f} {result['FAR']:>8.4f} {result['FRR']:>8.4f}")
+        print(f"{str(user):<10} {result['accuracy']:>10.4f} {result['AUC']:>8.4f} "
+              f"{result['EER_threshold']:>10.4f} {result['FAR']:>8.4f} {result['FRR']:>8.4f}")
     if accs:
-        print('-' * 40)
-        print(f"{'Mean':<10} {np.mean(accs):>10.4f} {np.mean(fars):>8.4f} {np.mean(frrs):>8.4f}")
+        print('-' * 58)
+        print(f"{'Mean':<10} {np.mean(accs):>10.4f} {np.mean(aucs):>8.4f} "
+              f"{'':>10} {np.mean(fars):>8.4f} {np.mean(frrs):>8.4f}")
 
 
 if __name__ == '__main__':
-    # train all users
     train_all_users(
         CURRENT_DATASET,
         DATASET_USAGE,
@@ -203,9 +246,3 @@ if __name__ == '__main__':
         NUM_TRAINING_SAMPLES
     )
     evaluate_all_users(CURRENT_DATASET, DATASET_USAGE, NUM_TRAINING_SAMPLES)
-
-    # or train just one specific user:
-    # scaler, model = train_model(
-    #     CURRENT_DATASET, DATASET_USAGE, NUM_ACTIONS, NUM_TRAINING_SAMPLES,
-    #     target_user='user7'
-    # )
