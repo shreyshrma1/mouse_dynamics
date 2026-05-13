@@ -24,14 +24,31 @@ def load_user_data(user, data_dir=TRAINING_DIR):
 def compute_velocities(df):
     df = df[df["state"] != "Scroll"].copy()
     df = df[df["state"] != "Down"].copy()
-    df["client_timestamp"] = pd.to_numeric(df["client_timestamp"], errors="coerce")
     dt = df["client_timestamp"].diff()
     dx = df["x"].diff()
     dy = df["y"].diff()
-    df["vx"] = dx / dt.replace(0, np.nan)  # fix: divide by dt not dy
-    df["vy"] = dy / dt.replace(0, np.nan)  # fix: vy not vx, divide by dt
+    df["vx"] = dx / dt.replace(0, np.nan)
+    df["vy"] = dy / dt.replace(0, np.nan)
     df = df.dropna(subset=['vx', 'vy'])
     df = df[np.isfinite(df['vx']) & np.isfinite(df['vy'])]
+
+    # ── normalize velocities ───────────────────────────────────────────
+    vx = df['vx'].values
+    vy = df['vy'].values
+
+    # clip extreme outliers first (1st and 99th percentile)
+    vx = np.clip(vx, np.percentile(vx, 1), np.percentile(vx, 99))
+    vy = np.clip(vy, np.percentile(vy, 1), np.percentile(vy, 99))
+
+    # normalize to zero mean unit variance
+    vx = (vx - vx.mean()) / (vx.std() + 1e-8)
+    vy = (vy - vy.mean()) / (vy.std() + 1e-8)
+
+    df = df.copy()
+    df['vx'] = vx
+    df['vy'] = vy
+
+
     return df[['vx', 'vy']].values
 
 
