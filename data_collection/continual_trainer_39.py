@@ -24,6 +24,7 @@ import numpy as np
 from collections import deque
 from sklearn.svm import OneClassSVM
 from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import KernelPCA
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from measurements.extract_features_sess import extract_session_features
@@ -51,35 +52,36 @@ class ContinualTrainer39:
         save_dir="checkpoints_ocsvm",
         buffer_size=50,
         window_size=200,
-        nu=0.02,
-        gamma=0.01,
+        nu=0.05,
+        gamma="scale",
+        kpca_variance=0.95,
     ):
         """
         Args:
-            user_id:     user that is being identified
-            save_dir:    directory to save trained models and scalers
-            buffer_size: maximum number of windows to keep in the replay
-                         buffer — older windows are dropped when full
-            window_size: number of PC/DD actions per window
-            nu:          OCSVM nu / contamination parameter — fraction of
-                         training data allowed outside the boundary
-            gamma:       OCSVM radial basis function shape — how closely
-                         the boundary fits the training data
+            user_id:       user that is being identified
+            save_dir:      directory to save trained models and scalers
+            buffer_size:   maximum number of windows to keep in the replay
+                           buffer — older windows are dropped when full
+            window_size:   number of PC/DD actions per window
+            nu:            OCSVM nu / contamination parameter — fraction of
+                           training data allowed outside the boundary
+            gamma:         OCSVM RBF kernel width ("scale" lets sklearn compute it)
+            kpca_variance: fraction of KPCA eigenvalue mass to retain (default 0.95)
         """
-        self.user_id     = user_id
-        self.save_dir    = save_dir
-        self.window_size = window_size
-        self.nu          = nu
-        self.gamma       = gamma
-        self.score_lo    = 0.0
-        self.score_hi    = 1.0
-        self.threshold   = 0.5
-        self.n_sessions  = 0
+        self.user_id       = user_id
+        self.save_dir      = save_dir
+        self.window_size   = window_size
+        self.nu            = nu
+        self.gamma         = gamma
+        self.kpca_variance = kpca_variance
+        self.n_sessions    = 0
         os.makedirs(save_dir, exist_ok=True)
 
-        self.buffer = deque(maxlen=buffer_size)
-        self.model  = None
-        self.scaler = None
+        self.buffer      = deque(maxlen=buffer_size)
+        self.model       = None
+        self.scaler      = None
+        self.kpca        = None
+        self.kpca_n_components = None
 
 
     # ── Feature extraction ────────────────────────────────────────────────
@@ -103,19 +105,56 @@ class ContinualTrainer39:
             return []
 
 
-    # ── Normalization ─────────────────────────────────────────────────────
+    # ── KPCA ─────────────────────────────────────────────────────────────
 
-    def _normalize(self, s):
-        """Normalize scores using the training data range."""
-        if self.score_hi - self.score_lo < 1e-9:
-            return np.zeros_like(s)
-        return (s - self.score_lo) / (self.score_hi - self.score_lo)
+    def _fit_kpca(self, x_sc):
+        """
+        Fit KernelPCA on scaled training data and retain enough components
+        to explain kpca_variance of the eigenvalue mass.
+
+        KPCA is fit once per training run. The feature independence structure
+        doesn't change between sessions, so there's no benefit to refitting it
+        incrementally.
+
+        Returns x_proj, the projected data.
+        """
+        max_components = min(x_sc.shape[0] - 1, x_sc.shape[1])
+        if max_components < 1:
+            self.kpca = None
+            self.kpca_n_components = None
+            return x_sc
+
+        kpca = KernelPCA(n_components=max_components, kernel="linear", fit_inverse_transform=False)
+        x_full = kpca.fit_transform(x_sc)
+
+        eigvals = getattr(kpca, "eigenvalues_", None)
+        if eigvals is None or np.sum(eigvals) <= 1e-12:
+            n_components = x_full.shape[1]
+        else:
+            explained = np.cumsum(eigvals) / np.sum(eigvals)
+            n_components = int(np.searchsorted(explained, self.kpca_variance) + 1)
+
+        n_components = max(1, min(n_components, x_full.shape[1]))
+
+        self.kpca = kpca
+        self.kpca_n_components = n_components
+
+        print(f"[Trainer] KPCA: retaining {n_components}/{max_components} components "
+              f"({self.kpca_variance * 100:.0f}% variance)")
+
+        return x_full[:, :n_components]
+
+    def _apply_kpca(self, x_sc):
+        """Apply fitted KPCA to scaled data. Falls back to identity if not fitted."""
+        if self.kpca is None:
+            return x_sc
+        return self.kpca.transform(x_sc)[:, :self.kpca_n_components]
 
 
     # ── Training ──────────────────────────────────────────────────────────
 
     def _retrain(self):
-        """Retrain OCSVM on all buffered windows."""
+        """Retrain scaler -> KPCA -> OCSVM on all buffered windows."""
         all_rows = np.vstack(list(self.buffer))
         if len(all_rows) < 10:
             return
@@ -123,22 +162,15 @@ class ContinualTrainer39:
         self.scaler = StandardScaler()
         x_sc = self.scaler.fit_transform(all_rows)
 
+        x_proj = self._fit_kpca(x_sc)
+
         self.model = OneClassSVM(kernel="rbf", nu=self.nu, gamma=self.gamma)
-        self.model.fit(x_sc)
+        self.model.fit(x_proj)
 
-        # compute score range on training data for normalization
-        raw = self.model.decision_function(x_sc)
-        self.score_lo = float(raw.min())
-        self.score_hi = float(raw.max())
-
-        # threshold = 10th percentile of training scores
-        # meaning 90% of legitimate training samples will be accepted
-        norm = self._normalize(raw)
-        self.threshold = float(np.percentile(norm, 10))
-
-        print(f"[Trainer] Retrained on {len(all_rows)} actions from "
-              f"{len(self.buffer)} windows — "
-              f"threshold: {self.threshold:.4f} (mean: {norm.mean():.3f})")
+        # log training score distribution so we know where the boundary sits
+        scores = self.model.decision_function(x_proj)
+        print(f"[Trainer] Retrained on {len(all_rows)} rows from {len(self.buffer)} windows — "
+              f"scores: min={scores.min():.4f}, mean={scores.mean():.4f}, max={scores.max():.4f}")
 
 
     # ── Public interface ──────────────────────────────────────────────────
@@ -166,10 +198,7 @@ class ContinualTrainer39:
         self._save()
 
     def backfill(self, data_dir):
-        """
-        Reprocess all existing session files and fill the replay buffer.
-        Useful after changing extraction parameters or fixing bugs.
-        """
+        """Reprocess all existing session files and fill the replay buffer."""
         user_dir = os.path.join(data_dir, self.user_id)
         if not os.path.isdir(user_dir):
             print(f"[Trainer] No data directory found at {user_dir}")
@@ -198,9 +227,11 @@ class ContinualTrainer39:
 
     def score(self, session_path):
         """
-        Score a session file.
-        Returns (margin, accepted) where margin > 0 means accepted.
-        Returns (None, None) if model is not yet trained.
+        Score a session file using the raw OCSVM decision function.
+          positive -> inside boundary -> ACCEPT
+          negative -> outside boundary -> REJECT
+
+        Returns (score, accepted) or (None, None) if model not ready.
         """
         if self.model is None:
             print("[Trainer] Model not yet trained — collecting more data")
@@ -213,53 +244,66 @@ class ContinualTrainer39:
 
         x = np.vstack(windows)
         x_sc = self.scaler.transform(x)
-        norm_score = float(self._normalize(self.model.decision_function(x_sc)).mean())
-        margin     = norm_score - self.threshold
-        accepted   = margin >= 0
+        x_proj = self._apply_kpca(x_sc)
 
-        print(f"[Trainer] Score: {norm_score:.4f} "
-              f"(threshold: {self.threshold:.4f}, margin: {margin:+.4f}) → "
-              f"{'ACCEPTED' if accepted else 'REJECTED'}")
+        score    = float(self.model.decision_function(x_proj).mean())
+        accepted = score >= 0
 
-        return margin, accepted
+        print(f"[Trainer] Score: {score:+.4f} → {'ACCEPTED' if accepted else 'REJECTED'}")
+        return score, accepted
+
+
+    # ── Persistence ───────────────────────────────────────────────────────
 
     def _save(self):
-        """Save model, scaler, and state to disk."""
+        """Save model, scaler, KPCA, and state to disk."""
         path = os.path.join(self.save_dir, self.user_id)
         os.makedirs(path, exist_ok=True)
         if self.model is not None:
             joblib.dump(self.model,  os.path.join(path, "model_39.pkl"))
             joblib.dump(self.scaler, os.path.join(path, "scaler_39.pkl"))
+        if self.kpca is not None:
+            joblib.dump(self.kpca,   os.path.join(path, "kpca_39.pkl"))
         joblib.dump({
-            "buffer":     list(self.buffer),
-            "n_sessions": self.n_sessions,
-            "threshold":  self.threshold,
-            "score_lo":   self.score_lo,
-            "score_hi":   self.score_hi,
+            "buffer":           list(self.buffer),
+            "n_sessions":       self.n_sessions,
+            "kpca_n_components":self.kpca_n_components,
+            "nu":               self.nu,
+            "gamma":            self.gamma,
+            "kpca_variance":    self.kpca_variance,
         }, os.path.join(path, "state_39.pkl"))
-        print(f"[Trainer] Saved to {path}/")
 
     def load(self):
-        """Load model, scaler, and state from disk."""
+        """Load model, scaler, KPCA, and state from disk."""
         path = os.path.join(self.save_dir, self.user_id)
         try:
             state = joblib.load(os.path.join(path, "state_39.pkl"))
-            self.buffer     = deque(state["buffer"], maxlen=self.buffer.maxlen)
-            self.n_sessions = state["n_sessions"]
-            self.threshold  = state.get("threshold", 0.5)
-            self.score_lo   = state.get("score_lo",  0.0)
-            self.score_hi   = state.get("score_hi",  1.0)
+            self.buffer            = deque(state["buffer"], maxlen=self.buffer.maxlen)
+            self.n_sessions        = state["n_sessions"]
+            self.kpca_n_components = state.get("kpca_n_components", None)
+            self.nu                = state.get("nu",            self.nu)
+            self.gamma             = state.get("gamma",         self.gamma)
+            self.kpca_variance     = state.get("kpca_variance", self.kpca_variance)
             print(f"[Trainer] Loaded state: {self.n_sessions} sessions, "
                   f"{len(self.buffer)} windows")
         except FileNotFoundError:
             print("[Trainer] No saved state found — starting fresh")
             return
+
         try:
             self.model  = joblib.load(os.path.join(path, "model_39.pkl"))
             self.scaler = joblib.load(os.path.join(path, "scaler_39.pkl"))
             print("[Trainer] Loaded trained model from disk")
         except FileNotFoundError:
             print("[Trainer] No trained model found — will train after enough data")
+
+        try:
+            self.kpca = joblib.load(os.path.join(path, "kpca_39.pkl"))
+        except FileNotFoundError:
+            self.kpca = None
+
+
+    # ── Properties ───────────────────────────────────────────────────────
 
     @property
     def is_ready(self):
@@ -270,6 +314,7 @@ class ContinualTrainer39:
         lines = [f"Sessions collected: {self.n_sessions}"]
         lines.append(f"Windows buffered:  {len(self.buffer)} / {MIN_WINDOWS} needed")
         lines.append(f"Model:             {'ready' if self.model else 'not yet trained'}")
+        lines.append(f"KPCA components:   {self.kpca_n_components}")
         return "\n".join(lines)
 
 
