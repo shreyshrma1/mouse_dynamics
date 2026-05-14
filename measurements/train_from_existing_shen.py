@@ -1,12 +1,15 @@
 """
-train_from_existing_shen.py
+train_from_existing.py
 
 Trains the Shen et al. pipeline on a user's existing collected data.
+Holds out the last 25% of windows for evaluation.
 
-Saves model components to checkpoints_shen/<user_id>/ for later scoring.
+Saves to checkpoints_shen/<user_id>/:
+    model.pkl       - trained OneClassSVM
+    state.pkl       - reference vector, normalization stats, held-out windows
 
 Usage:
-    python measurements/train_from_existing_shen.py
+    python data_collection/train_from_existing.py
 """
 
 import sys
@@ -20,9 +23,10 @@ from sklearn.svm import OneClassSVM
 
 DATA_DIR    = "collected_data"
 SAVE_DIR    = "checkpoints_shen"
-WINDOW_SIZE = 50
+WINDOW_SIZE = 10
 NU          = 0.06
 GAMMA       = "scale"
+HELD_OUT_FRAC = 0.25
 
 FEATURE_COLS = [
     "type_of_action","traveled_distance_pixel","elapsed_time",
@@ -72,15 +76,6 @@ def find_reference(train_samples):
     return train_samples[np.argmin(mean_dists)]
 
 
-def distance_vectors(samples, reference):
-    return np.abs(np.atleast_2d(samples) - reference)
-
-
-def normalize(dist_vecs, mean, std):
-    std_safe = np.where(std < 1e-9, 1.0, std)
-    return (dist_vecs - mean) / std_safe
-
-
 def main():
     user_id = input("Enter user ID: ").strip()
 
@@ -93,19 +88,27 @@ def main():
     print(f"Found {len(session_files)} session files for {user_id}")
 
     all_vecs = extract_all_windows(session_files, user_id)
-    if len(all_vecs) < 5:
+    if len(all_vecs) < 8:
         print(f"Not enough windows ({len(all_vecs)}) to train — collect more data")
         sys.exit(1)
 
-    train_samples = np.array(all_vecs)
-    print(f"Extracted {len(train_samples)} windows")
+    # 75/25 split on windows, preserving time order
+    n_total  = len(all_vecs)
+    n_test   = max(1, int(n_total * HELD_OUT_FRAC))
+    n_train  = n_total - n_test
+
+    train_samples = np.array(all_vecs[:n_train])
+    test_samples  = np.array(all_vecs[n_train:])
+
+    print(f"Total windows: {n_total}  |  Train: {n_train}  |  Held-out: {n_test}")
 
     # Shen pipeline
     reference   = find_reference(train_samples)
-    train_dists = distance_vectors(train_samples, reference)
+    train_dists = np.abs(train_samples - reference)
     dist_mean   = train_dists.mean(axis=0)
     dist_std    = train_dists.std(axis=0)
-    train_norm  = normalize(train_dists, dist_mean, dist_std)
+    std_safe    = np.where(dist_std < 1e-9, 1.0, dist_std)
+    train_norm  = (train_dists - dist_mean) / std_safe
 
     model = OneClassSVM(kernel="rbf", nu=NU, gamma=GAMMA)
     model.fit(train_norm)
@@ -116,19 +119,20 @@ def main():
     # Save
     save_path = os.path.join(SAVE_DIR, user_id)
     os.makedirs(save_path, exist_ok=True)
-    joblib.dump(model,     os.path.join(save_path, "model.pkl"))
+    joblib.dump(model, os.path.join(save_path, "model.pkl"))
     joblib.dump({
-        "reference":  reference,
-        "dist_mean":  dist_mean,
-        "dist_std":   dist_std,
-        "n_windows":  len(train_samples),
-        "nu":         NU,
-        "gamma":      GAMMA,
-        "window_size":WINDOW_SIZE,
+        "reference":     reference,
+        "dist_mean":     dist_mean,
+        "dist_std":      dist_std,
+        "test_samples":  test_samples,   # held-out windows saved here
+        "n_train":       n_train,
+        "n_test":        n_test,
+        "nu":            NU,
+        "gamma":         GAMMA,
+        "window_size":   WINDOW_SIZE,
     }, os.path.join(save_path, "state.pkl"))
 
     print(f"Model saved to {save_path}/")
-    print(f"Training complete — {len(train_samples)} windows used")
 
 
 if __name__ == "__main__":

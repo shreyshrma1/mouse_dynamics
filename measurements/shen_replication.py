@@ -11,7 +11,8 @@ Replicates the Shen et al. (2013) pipeline as closely as possible:
     5. Train One-Class SVM on normalized distance vectors
     6. Evaluate:
          - Legitimate: score each held-out window individually
-         - Impostors:  score each other user's sessions individually
+         - Impostors:  score each other user's windows individually
+         - AUC computed from raw scores across all legitimate + impostor windows
 
 Usage:
     python measurements/shen_replication.py
@@ -23,6 +24,7 @@ import os
 import argparse
 import numpy as np
 from sklearn.svm import OneClassSVM
+from sklearn.metrics import roc_auc_score
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from measurements.extract_features_sess import extract_session_features
@@ -69,10 +71,6 @@ def get_session_files(user_dir):
 
 
 def extract_all_windows(session_files, user_id, window_size):
-    """
-    Extract one feature vector per window across all session files.
-    Returns a list of 1-D arrays in session order.
-    """
     all_vecs = []
     for path in session_files:
         try:
@@ -90,10 +88,6 @@ def extract_all_windows(session_files, user_id, window_size):
 
 
 def find_reference(train_samples):
-    """
-    Training sample with minimum mean Manhattan distance to all others.
-    Shen et al. Eq. (4).
-    """
     n = len(train_samples)
     mean_dists = np.zeros(n)
     for i in range(n):
@@ -103,21 +97,15 @@ def find_reference(train_samples):
 
 
 def distance_vectors(samples, reference):
-    """Element-wise absolute difference from reference. Shen et al. Eq. (1)/(2)."""
     return np.abs(np.atleast_2d(samples) - reference)
 
 
 def normalize(dist_vecs, mean, std):
-    """Z-score normalize. Shen et al. Eq. (3)."""
     std_safe = np.where(std < 1e-9, 1.0, std)
     return (dist_vecs - mean) / std_safe
 
 
 def score_windows(vecs, reference, dist_mean, dist_std, model):
-    """
-    Score each window independently.
-    Returns array of decision function scores (one per window).
-    """
     if len(vecs) == 0:
         return np.array([])
     x = np.array(vecs)
@@ -145,33 +133,31 @@ def main():
         print(f"User: {user}")
         print(f"{'=' * 50}")
 
-        user_dir = os.path.join(DATA_DIR, user)
+        user_dir  = os.path.join(DATA_DIR, user)
         all_files = get_session_files(user_dir)
-
-        # Extract all windows across all sessions in time order
-        all_vecs = extract_all_windows(all_files, user, args.window_size)
+        all_vecs  = extract_all_windows(all_files, user, args.window_size)
 
         if len(all_vecs) < 8:
             print(f"  Not enough windows ({len(all_vecs)}), skipping")
             continue
 
         n_total = len(all_vecs)
-        n_test = max(1, int(n_total * args.held_out_frac))
+        n_test  = max(1, int(n_total * args.held_out_frac))
         n_train = n_total - n_test
 
         train_samples = np.array(all_vecs[:n_train])
-        test_samples = np.array(all_vecs[n_train:])
+        test_samples  = np.array(all_vecs[n_train:])
 
         print(f"  Total windows: {n_total}  |  Train: {n_train}  |  Test: {n_test}")
 
-        # ── Reference + distance normalization ────────────────────────────
-        reference = find_reference(train_samples)
+        # Reference + normalization
+        reference   = find_reference(train_samples)
         train_dists = distance_vectors(train_samples, reference)
-        dist_mean = train_dists.mean(axis=0)
-        dist_std = train_dists.std(axis=0)
-        train_norm = normalize(train_dists, dist_mean, dist_std)
+        dist_mean   = train_dists.mean(axis=0)
+        dist_std    = train_dists.std(axis=0)
+        train_norm  = normalize(train_dists, dist_mean, dist_std)
 
-        # ── OCSVM ─────────────────────────────────────────────────────────
+        # OCSVM
         model = OneClassSVM(kernel="rbf", nu=args.nu, gamma=gamma)
         model.fit(train_norm)
 
@@ -179,8 +165,8 @@ def main():
         print(f"  Train scores: min={train_scores.min():.4f}, "
               f"mean={train_scores.mean():.4f}, max={train_scores.max():.4f}")
 
-        # ── Legitimate: score each held-out window individually ───────────
-        legit_scores = score_windows(test_samples, reference, dist_mean, dist_std, model)
+        # Legitimate held-out
+        legit_scores   = score_windows(test_samples, reference, dist_mean, dist_std, model)
         legit_accepted = int(np.sum(legit_scores >= 0))
         legit_scored   = len(legit_scores)
 
@@ -189,9 +175,11 @@ def main():
               f"mean={legit_scores.mean():+.4f}, max={legit_scores.max():+.4f}")
         print(f"    Accepted: {legit_accepted}/{legit_scored}")
 
-        # ── Impostors: score each other user's windows individually ───────
+        # Impostors
         impostor_accepted = 0
-        impostor_scored = 0
+        impostor_scored   = 0
+        all_impostor_scores = []
+
         for other_user in BALABIT_USERS:
             if other_user == user:
                 continue
@@ -200,26 +188,36 @@ def main():
             imp_scores  = score_windows(other_vecs, reference, dist_mean, dist_std, model)
             if len(imp_scores) == 0:
                 continue
-            impostor_scored += len(imp_scores)
-            impostor_accepted += int(np.sum(imp_scores >= 0))
+            impostor_scored        += len(imp_scores)
+            impostor_accepted      += int(np.sum(imp_scores >= 0))
+            all_impostor_scores.extend(imp_scores.tolist())
 
         impostor_rejected = impostor_scored - impostor_accepted
 
-        frr = 1 - legit_accepted / legit_scored if legit_scored > 0 else 0.0
-        far = impostor_accepted / impostor_scored if impostor_scored > 0 else 0.0
+        # AUC
+        all_scores = np.concatenate([legit_scores, np.array(all_impostor_scores)])
+        all_labels = np.concatenate([
+            np.ones(len(legit_scores)),
+            np.zeros(len(all_impostor_scores))
+        ])
+        auc = roc_auc_score(all_labels, all_scores) \
+              if len(np.unique(all_labels)) == 2 else float("nan")
+
+        frr = 1 - legit_accepted    / legit_scored    if legit_scored    > 0 else 0.0
+        far = impostor_accepted / impostor_scored      if impostor_scored > 0 else 0.0
         acc = (legit_accepted + impostor_rejected) / (legit_scored + impostor_scored) \
               if (legit_scored + impostor_scored) > 0 else 0.0
 
         print(f"\n  Impostors:  {impostor_rejected}/{impostor_scored} rejected")
-        print(f"  FAR: {far*100:.1f}%  FRR: {frr*100:.1f}%  Accuracy: {acc*100:.1f}%\n")
+        print(f"  FAR: {far*100:.1f}%  FRR: {frr*100:.1f}%  "
+              f"Accuracy: {acc*100:.1f}%  AUC: {auc:.4f}\n")
 
         all_results.append({
             "user": user,
-            "legit_accepted": legit_accepted,
-            "legit_scored": legit_scored,
-            "impostor_rejected": impostor_rejected,
-            "impostor_scored": impostor_scored,
-            "far": far, "frr": frr, "acc": acc,
+            "legit_accepted": legit_accepted, "legit_scored": legit_scored,
+            "impostor_rejected": impostor_rejected, "impostor_scored": impostor_scored,
+            "far": far, "frr": frr, "acc": acc, "auc": auc,
+            "all_scores": all_scores, "all_labels": all_labels,
         })
 
     if not all_results:
@@ -229,32 +227,40 @@ def main():
     mean_far = sum(r["far"] for r in all_results) / len(all_results)
     mean_frr = sum(r["frr"] for r in all_results) / len(all_results)
     mean_acc = sum(r["acc"] for r in all_results) / len(all_results)
+    mean_auc = sum(r["auc"] for r in all_results if not np.isnan(r["auc"])) \
+               / sum(1 for r in all_results if not np.isnan(r["auc"]))
 
-    tla = sum(r["legit_accepted"] for r in all_results)
-    tls = sum(r["legit_scored"] for r in all_results)
+    tla = sum(r["legit_accepted"]    for r in all_results)
+    tls = sum(r["legit_scored"]      for r in all_results)
     tir = sum(r["impostor_rejected"] for r in all_results)
-    tis = sum(r["impostor_scored"] for r in all_results)
+    tis = sum(r["impostor_scored"]   for r in all_results)
 
-    micro_frr = 1 - tla / tls if tls > 0 else 0.0
-    micro_far = (tis - tir) / tis if tis > 0 else 0.0
+    # Micro AUC: pool all scores and labels across users
+    micro_all_scores = np.concatenate([r["all_scores"] for r in all_results])
+    micro_all_labels = np.concatenate([r["all_labels"] for r in all_results])
+    micro_auc = roc_auc_score(micro_all_labels, micro_all_scores) \
+                if len(np.unique(micro_all_labels)) == 2 else float("nan")
+
+    micro_frr = 1 - tla / tls          if tls > 0 else 0.0
+    micro_far = (tis - tir) / tis      if tis > 0 else 0.0
     micro_acc = (tla + tir) / (tls + tis) if (tls + tis) > 0 else 0.0
 
-    print(f"\n{'=' * 55}")
+    print(f"\n{'=' * 62}")
     print(f"  Aggregate Results ({len(all_results)} users)")
-    print(f"{'=' * 55}")
-    print(f"  {'User':<12} {'FAR':>8} {'FRR':>8} {'Accuracy':>10}")
-    print(f"  {'-' * 42}")
+    print(f"{'=' * 62}")
+    print(f"  {'User':<12} {'FAR':>8} {'FRR':>8} {'Accuracy':>10} {'AUC':>8}")
+    print(f"  {'-' * 50}")
     for r in all_results:
         print(f"  {r['user']:<12} {r['far']*100:>7.1f}% "
-              f"{r['frr']*100:>7.1f}% {r['acc']*100:>9.1f}%")
-    print(f"  {'-' * 42}")
+              f"{r['frr']*100:>7.1f}% {r['acc']*100:>9.1f}% {r['auc']:>8.4f}")
+    print(f"  {'-' * 50}")
     print(f"  {'Mean':<12} {mean_far*100:>7.1f}% "
-          f"{mean_frr*100:>7.1f}% {mean_acc*100:>9.1f}%")
+          f"{mean_frr*100:>7.1f}% {mean_acc*100:>9.1f}% {mean_auc:>8.4f}")
     print(f"  {'Micro':<12} {micro_far*100:>7.1f}% "
-          f"{micro_frr*100:>7.1f}% {micro_acc*100:>9.1f}%")
+          f"{micro_frr*100:>7.1f}% {micro_acc*100:>9.1f}% {micro_auc:>8.4f}")
     print(f"\n  Total legitimate: {tla}/{tls} accepted")
     print(f"  Total impostors:  {tir}/{tis} rejected")
-    print(f"{'=' * 55}")
+    print(f"{'=' * 62}")
 
 
 if __name__ == "__main__":

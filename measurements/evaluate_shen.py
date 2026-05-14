@@ -2,24 +2,23 @@
 evaluate_shen.py
 
 Evaluate a trained Shen pipeline model against:
-  - Legitimate sessions (collected_data/<user>/) -> should be ACCEPTED
-  - Impostor sessions (balabit_dataset/)         -> should be REJECTED
+  - Held-out legitimate windows (saved during training) -> should be ACCEPTED
+  - Impostor sessions (balabit_dataset/)               -> should be REJECTED
 
 Usage:
-    python measurements/evaluate_shen.py --user shrey
+    python measurements/evaluate_shen.py
 """
 
 import sys
 import os
-import argparse
 import joblib
 import numpy as np
+from sklearn.metrics import roc_auc_score
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from measurements.extract_features_sess import extract_session_features
 
 SAVE_DIR     = "checkpoints_shen"
-LEGIT_DIR    = "collected_data"
 IMPOSTOR_DIR = "balabit_dataset/training_files"
 
 FEATURE_COLS = [
@@ -63,9 +62,8 @@ def extract_windows(session_files, user_id, window_size):
     return all_vecs
 
 
-def score(vecs, model, reference, dist_mean, dist_std):
-    """Score a list of windows. Returns array of decision function scores."""
-    if not vecs:
+def score_vecs(vecs, model, reference, dist_mean, dist_std):
+    if len(vecs) == 0:
         return np.array([])
     x = np.abs(np.array(vecs) - reference)
     x = (x - dist_mean) / np.where(dist_std < 1e-9, 1.0, dist_std)
@@ -73,37 +71,32 @@ def score(vecs, model, reference, dist_mean, dist_std):
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--user", required=True)
-    args = parser.parse_args()
+    user = input("Enter user ID: ").strip()
 
-    # Load model
-    save_path = os.path.join(SAVE_DIR, args.user)
+    save_path = os.path.join(SAVE_DIR, user)
     try:
         model = joblib.load(os.path.join(save_path, "model.pkl"))
         state = joblib.load(os.path.join(save_path, "state.pkl"))
     except FileNotFoundError:
-        print(f"No trained model found at {save_path} — run train_from_existing.py first")
+        print(f"No trained model found at {save_path} — run train_from_existing_shen.py first")
         sys.exit(1)
 
-    reference   = state["reference"]
-    dist_mean   = state["dist_mean"]
-    dist_std    = state["dist_std"]
-    window_size = state["window_size"]
+    reference    = state["reference"]
+    dist_mean    = state["dist_mean"]
+    dist_std     = state["dist_std"]
+    test_samples = state["test_samples"]
+    window_size  = state["window_size"]
 
-    print(f"Loaded model for '{args.user}' "
-          f"(trained on {state['n_windows']} windows, "
+    print(f"\nLoaded model for '{user}' "
+          f"(train={state['n_train']} windows, held-out={state['n_test']} windows, "
           f"nu={state['nu']}, gamma={state['gamma']})\n")
 
-    # ── Legitimate ────────────────────────────────────────────────────────
-    legit_files = get_session_files(os.path.join(LEGIT_DIR, args.user))
-    legit_vecs  = extract_windows(legit_files, args.user, window_size)
-    legit_scores = score(legit_vecs, model, reference, dist_mean, dist_std)
-
+    # ── Legitimate: held-out windows ──────────────────────────────────────
+    legit_scores   = score_vecs(test_samples, model, reference, dist_mean, dist_std)
     legit_accepted = int(np.sum(legit_scores >= 0))
     legit_scored   = len(legit_scores)
 
-    print(f"Legitimate ({legit_scored} windows):")
+    print(f"Legitimate held-out ({legit_scored} windows):")
     if legit_scored > 0:
         print(f"  Scores: min={legit_scores.min():+.4f}, "
               f"mean={legit_scores.mean():+.4f}, max={legit_scores.max():+.4f}")
@@ -112,21 +105,31 @@ def main():
     # ── Impostors ─────────────────────────────────────────────────────────
     impostor_accepted = 0
     impostor_scored   = 0
+    all_impostor_scores = []
 
     impostor_users = sorted(os.listdir(IMPOSTOR_DIR))
     print(f"\nImpostors ({len(impostor_users)} users):")
     for imp_user in impostor_users:
         imp_files  = get_session_files(os.path.join(IMPOSTOR_DIR, imp_user))
         imp_vecs   = extract_windows(imp_files, imp_user, window_size)
-        imp_scores = score(imp_vecs, model, reference, dist_mean, dist_std)
+        imp_scores = score_vecs(imp_vecs, model, reference, dist_mean, dist_std)
         if len(imp_scores) == 0:
             continue
         accepted = int(np.sum(imp_scores >= 0))
-        impostor_accepted += accepted
-        impostor_scored   += len(imp_scores)
+        impostor_accepted       += accepted
+        impostor_scored         += len(imp_scores)
+        all_impostor_scores.extend(imp_scores.tolist())
         print(f"  {imp_user:<12} {len(imp_scores) - accepted}/{len(imp_scores)} rejected")
 
     impostor_rejected = impostor_scored - impostor_accepted
+
+    # ── AUC ───────────────────────────────────────────────────────────────
+    all_scores = np.concatenate([legit_scores, np.array(all_impostor_scores)])
+    all_labels = np.concatenate([
+        np.ones(len(legit_scores)),   # 1 = legitimate
+        np.zeros(len(all_impostor_scores))  # 0 = impostor
+    ])
+    auc = roc_auc_score(all_labels, all_scores) if len(np.unique(all_labels)) == 2 else float("nan")
 
     # ── Summary ───────────────────────────────────────────────────────────
     frr = 1 - legit_accepted    / legit_scored    if legit_scored    > 0 else 0.0
@@ -135,14 +138,15 @@ def main():
           if (legit_scored + impostor_scored) > 0 else 0.0
 
     print(f"""
-            {'=' * 45}
-            Results for '{args.user}'
-            {'=' * 45}
-            Legitimate:  {legit_accepted}/{legit_scored} accepted   FRR = {frr*100:.1f}%
-            Impostors:   {impostor_rejected}/{impostor_scored} rejected  FAR = {far*100:.1f}%
-            Accuracy:    {acc*100:.1f}%
-            {'=' * 45}
-            """)
+        {'=' * 45}
+        Results for '{user}'
+        {'=' * 45}
+        Legitimate:  {legit_accepted}/{legit_scored} accepted   FRR = {frr*100:.1f}%
+        Impostors:   {impostor_rejected}/{impostor_scored} rejected  FAR = {far*100:.1f}%
+        Accuracy:    {acc*100:.1f}%
+        AUC:         {auc:.4f}
+        {'=' * 45}
+        """)
 
 
 if __name__ == "__main__":
