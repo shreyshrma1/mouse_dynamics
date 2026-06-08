@@ -1,0 +1,123 @@
+[meta]
+username=test3
+password=9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+order=acc_177863,acc_551489,acc_050251,acc_215065,acc_311865,acc_074954
+
+[accounts]
+id=acc_177863 | type=Checking | name=Main Checking | balance=2350.62 | account_no=552538268568 | routing_no=021000021 | opened=Sep 24, 2025 | rate=N/A | limit=2500.00
+id=acc_551489 | type=Savings | name=Main Savings | balance=3485.00 | account_no=335686074395 | routing_no=021000021 | opened=Aug 03, 2025 | rate=2.35% APY | limit=2500.00
+id=acc_074954 | type=Savings | name=Emergency Fund | balance=620.00 | account_no=477469546041 | routing_no=021000021 | opened=Apr 08, 2025 | rate=2.35% APY | limit=2500.00
+id=acc_311865 | type=Savings | name=Travel Fund | balance=200.00 | account_no=114822507666 | routing_no=021000021 | opened=Sep 20, 2024 | rate=2.35% APY | limit=2500.00
+id=acc_215065 | type=Savings | name=Car Fund | balance=520.00 | account_no=341741106489 | routing_no=021000021 | opened=Oct 31, 2025 | rate=2.35% APY | limit=2500.00
+id=acc_050251 | type=Savings | name=Charity Fund | balance=230.00 | account_no=564314150313 | routing_no=021000021 | opened=Feb 16, 2026 | rate=2.35% APY | limit=2500.00
+
+[transactions]
+id=txn_296462 | ts=1774107298 | from=external | to=acc_177863 | amount=2400.00 | note=Payroll deposit | status=completed | payee_acc_no=
+id=txn_737978 | ts=1774280098 | from=acc_177863 | to=external | amount=850.00 | note=Rent payment | status=completed | payee_acc_no=702365753581
+id=txn_187785 | ts=1774366498 | from=acc_177863 | to=external | amount=62.40 | note=Electric bill | status=completed | payee_acc_no=495011271825
+id=txn_127256 | ts=1774539298 | from=acc_177863 | to=acc_551489 | amount=200.00 | note=Savings transfer | status=completed | payee_acc_no=
+id=txn_091958 | ts=1774712098 | from=acc_177863 | to=external | amount=38.99 | note=Streaming subscriptions | status=completed | payee_acc_no=983933461288
+id=txn_237224 | ts=1774884898 | from=acc_177863 | to=external | amount=124.50 | note=Grocery run | status=completed | payee_acc_no=217629390343
+id=txn_830940 | ts=1775057698 | from=external | to=acc_177863 | amount=85.00 | note=Freelance payment | status=completed | payee_acc_no=
+id=txn_473497 | ts=1775230498 | from=acc_177863 | to=external | amount=9.99 | note=Cloud storage | status=completed | payee_acc_no=015560381086
+id=txn_542054 | ts=1775403298 | from=acc_177863 | to=external | amount=47.20 | note=Gas station | status=completed | payee_acc_no=456887118630
+id=txn_924585 | ts=1775662498 | from=external | to=acc_177863 | amount=2400.00 | note=Payroll deposit | status=completed
+id=txn_448567 | ts=1775835298 | from=acc_177863 | to=external | amount=850.00 | note=Rent payment | status=completed | payee_acc_no=702365753581
+id=txn_736416 | ts=1775921698 | from=acc_177863 | to=external | amount=62.40 | note=Electric bill | status=completed | payee_acc_no=495011271825
+id=txn_919892 | ts=1776094498 | from=acc_177863 | to=acc_551489 | amount=200.00 | note=Savings transfer | status=completed | payee_acc_no=
+id=txn_168058 | ts=1776267298 | from=acc_177863 | to=external | amount=210.00 | note=Car insurance | status=completed | payee_acc_no=688893103576
+id=txn_892686 | ts=1776440098 | from=acc_177863 | to=external | amount=89.30 | note=Pharmacy | status=completed | payee_acc_no=865535631404
+id=txn_193644 | ts=1776612898 | from=external | to=acc_551489 | amount=500.00 | note=Tax refund | status=completed | payee_acc_no=
+id=txn_019290 | ts=1776785698 | from=acc_177863 | to=external | amount=34.00 | note=Dinner out | status=completed | payee_acc_no=978156986113
+id=txn_391345 | ts=1776958498 | from=acc_177863 | to=external | amount=15.49 | note=Coffee shop | status=completed | payee_acc_no=510599503864
+id=txn_939261 | ts=1777131298 | from=acc_177863 | to=external | amount=9.99 | note=Music subscription | status=completed | payee_acc_no=718225067137
+id=txn_803290 | ts=1777390498 | from=external | to=acc_177863 | amount=2400.00 | note=Payroll deposit | status=completed
+id=txn_058569 | ts=1777563298 | from=acc_177863 | to=external | amount=850.00 | note=Rent payment | status=completed | payee_acc_no=702365753581
+id=txn_278439 | ts=1777649698 | from=acc_177863 | to=external | amount=62.40 | note=Electric bill | status=completed | payee_acc_no=495011271825
+id=txn_722594 | ts=1777822498 | from=acc_177863 | to=acc_551489 | amount=200.00 | note=Savings transfer | status=completed | payee_acc_no=
+id=txn_902726 | ts=1777995298 | from=acc_177863 | to=external | amount=143.20 | note=Grocery run | status=completed | payee_acc_no=217629390343
+id=txn_865442 | ts=1778168098 | from=acc_177863 | to=external | amount=55.00 | note=Internet bill | status=completed | payee_acc_no=516352582761
+id=txn_476226 | ts=1778340898 | from=external | to=acc_177863 | amount=120.00 | note=Freelance payment | status=completed | payee_acc_no=
+id=txn_623223 | ts=1778513698 | from=acc_177863 | to=external | amount=28.75 | note=Lunch | status=completed | payee_acc_no=296872353378
+id=txn_437156 | ts=1778686498 | from=acc_177863 | to=external | amount=9.99 | note=Cloud storage | status=completed | payee_acc_no=015560381086
+id=txn_038399 | ts=1778859298 | from=acc_177863 | to=external | amount=67.40 | note=Gas station | status=completed | payee_acc_no=456887118630
+id=txn_325116 | ts=1778945698 | from=external | to=acc_177863 | amount=2400.00 | note=Payroll deposit | status=completed
+id=txn_805859 | ts=1779032098 | from=acc_177863 | to=external | amount=850.00 | note=Rent payment | status=completed | payee_acc_no=702365753581
+id=txn_671821 | ts=1779118498 | from=acc_177863 | to=acc_551489 | amount=200.00 | note=Savings transfer | status=completed | payee_acc_no=
+id=txn_042051 | ts=1779204898 | from=acc_177863 | to=external | amount=44.60 | note=Grocery run | status=completed | payee_acc_no=217629390343
+id=txn_117869 | ts=1779291298 | from=external | to=acc_177863 | amount=18.50 | note=Refund | status=completed | payee_acc_no=
+id=txn_530459 | ts=1779298147 | from=acc_177863 | to=acc_074954 | amount=300.00 | note=Emergency deposit | status=completed | payee_acc_no=
+id=txn_887360 | ts=1779298168 | from=acc_177863 | to=acc_311865 | amount=200.00 | note=Travel deposit | status=completed | payee_acc_no=
+id=txn_768587 | ts=1779298187 | from=external | to=acc_551489 | amount=225.00 | note=Roomate | status=completed
+id=txn_710476 | ts=1779298210 | from=acc_551489 | to=acc_919644 | amount=75.00 | note=Laptop deposit | status=completed | payee_acc_no=
+id=txn_857808 | ts=1779298221 | from=external | to=acc_551489 | amount=600.00 | note=Freelance | status=completed
+id=txn_335492 | ts=1779298896 | from=external | to=acc_177863 | amount=2400.00 | note=Paycheck | status=completed
+id=txn_160918 | ts=1779298915 | from=acc_551489 | to=acc_177863 | amount=400.00 | note=Checking deposit | status=completed | payee_acc_no=
+id=txn_667920 | ts=1779298934 | from=acc_177863 | to=acc_551489 | amount=300.00 | note=Monthly deposit | status=completed | payee_acc_no=
+id=txn_751153 | ts=1779298946 | from=acc_177863 | to=acc_311865 | amount=150.00 | note=Travel deposit | status=completed | payee_acc_no=
+id=txn_397159 | ts=1779298959 | from=acc_177863 | to=acc_074954 | amount=200.00 | note=Emergency deposit | status=completed | payee_acc_no=
+id=txn_149032 | ts=1779298973 | from=external | to=acc_551489 | amount=180.00 | note=Equipment sale | status=completed
+id=txn_077550 | ts=1779298990 | from=acc_551489 | to=acc_919644 | amount=120.00 | note=Laptop deposit | status=completed | payee_acc_no=
+id=txn_346447 | ts=1779299006 | from=external | to=acc_551489 | amount=50.00 | note=Relatives | status=completed
+id=txn_223328 | ts=1779299021 | from=acc_551489 | to=acc_177863 | amount=50.00 | note=Week spending | status=completed | payee_acc_no=
+id=txn_325953 | ts=1779299566 | from=acc_177863 | to=external | amount=62.40 | note=May Electric | status=completed | payee_acc_no=495011271825
+id=txn_167703 | ts=1779299586 | from=acc_177863 | to=external | amount=55.00 | note=May Internet | status=completed | payee_acc_no=516352582761
+id=txn_045308 | ts=1779299631 | from=acc_177863 | to=external | amount=850.00 | note=Rent Payment | status=completed | payee_acc_no=
+id=txn_447042 | ts=1779299650 | from=acc_177863 | to=external | amount=38.99 | note=Streaming subscription | status=completed | payee_acc_no=
+id=txn_400764 | ts=1779299665 | from=acc_177863 | to=external | amount=9.99 | note=Music subscription | status=completed | payee_acc_no=
+id=txn_913445 | ts=1779299684 | from=acc_551489 | to=acc_177863 | amount=200.00 | note=Checking deposit | status=completed | payee_acc_no=
+id=txn_634779 | ts=1779299696 | from=acc_074954 | to=acc_177863 | amount=200.00 | note=Transfer | status=completed | payee_acc_no=
+id=txn_035767 | ts=1779299712 | from=acc_177863 | to=external | amount=200.00 | note=Hospital | status=completed | payee_acc_no=
+id=txn_713122 | ts=1779299721 | from=external | to=acc_551489 | amount=400.00 | note=Family | status=completed
+id=txn_698862 | ts=1779299740 | from=acc_551489 | to=acc_177863 | amount=200.00 | note=Buffer | status=completed | payee_acc_no=
+id=txn_855330 | ts=1779300084 | from=external | to=acc_904616 | amount=200.00 | note=Starting deposit | status=completed
+id=txn_146534 | ts=1779300102 | from=external | to=acc_551489 | amount=500.00 | note=Consulting payment | status=completed
+id=txn_687956 | ts=1779300126 | from=acc_551489 | to=acc_904616 | amount=200.00 | note=Startup deposit | status=completed | payee_acc_no=
+id=txn_980662 | ts=1779300136 | from=acc_177863 | to=acc_904616 | amount=100.00 | note=Startup deposit | status=completed | payee_acc_no=
+id=txn_366260 | ts=1779300193 | from=acc_177863 | to=acc_904616 | amount=50.00 | note=Startup deposit | status=completed | payee_acc_no=
+id=txn_643270 | ts=1779300248 | from=acc_904616 | to=external | amount=75.00 | note=May Registration | status=completed | payee_acc_no=509345689322
+id=txn_321168 | ts=1779300263 | from=acc_551489 | to=acc_311865 | amount=100.00 | note=Travel deposit | status=completed | payee_acc_no=
+id=txn_754905 | ts=1779300279 | from=acc_177863 | to=acc_311865 | amount=50.00 | note=Travel deposit | status=completed | payee_acc_no=
+id=txn_148617 | ts=1779300292 | from=external | to=acc_311865 | amount=50.00 | note=Friend sponsorship | status=completed
+id=txn_767028 | ts=1779301399 | from=external | to=acc_551489 | amount=1500.00 | note=Freelance payment | status=completed
+id=txn_260560 | ts=1779301414 | from=acc_551489 | to=acc_177863 | amount=1200.00 | note=Checking deposit | status=completed | payee_acc_no=
+id=txn_054218 | ts=1779301436 | from=acc_551489 | to=acc_904616 | amount=300.00 | note=Startup deposit | status=completed | payee_acc_no=
+id=txn_912353 | ts=1779301470 | from=acc_177863 | to=external | amount=45.00 | note=Subscription | status=completed | payee_acc_no=
+id=txn_436079 | ts=1779301480 | from=acc_177863 | to=external | amount=28.00 | note=Lunch expense | status=completed | payee_acc_no=
+id=txn_832775 | ts=1779301498 | from=acc_177863 | to=external | amount=180.00 | note=Gym membership | status=completed | payee_acc_no=
+id=txn_413248 | ts=1779301514 | from=acc_551489 | to=acc_177863 | amount=180.00 | note=Checking deposit | status=completed | payee_acc_no=
+id=txn_135176 | ts=1779301537 | from=external | to=acc_551489 | amount=250.00 | note=Travel reimbursment | status=completed
+id=txn_127111 | ts=1779301558 | from=acc_551489 | to=acc_074954 | amount=70.00 | note=Emergency deposit | status=completed | payee_acc_no=
+id=txn_682202 | ts=1779302618 | from=acc_904616 | to=acc_551489 | amount=775.00 | note=Startup closing deposit | status=completed | payee_acc_no=
+id=txn_673501 | ts=1779302661 | from=external | to=acc_551489 | amount=500.00 | note=Bonus | status=completed
+id=txn_693763 | ts=1779302681 | from=acc_551489 | to=acc_215065 | amount=350.00 | note=Opening deposit | status=completed | payee_acc_no=
+id=txn_216415 | ts=1779302697 | from=acc_177863 | to=acc_215065 | amount=125.00 | note=Car deposit | status=completed | payee_acc_no=
+id=txn_668071 | ts=1779302740 | from=acc_919644 | to=acc_551489 | amount=195.00 | note=Laptop deposit | status=completed | payee_acc_no=
+id=txn_503506 | ts=1779302797 | from=acc_551489 | to=external | amount=150.00 | note=Accessory payment | status=completed | payee_acc_no=
+id=txn_435171 | ts=1779302816 | from=acc_551489 | to=acc_215065 | amount=45.00 | note=Car deposit | status=completed | payee_acc_no=
+id=txn_786886 | ts=1779302860 | from=acc_551489 | to=external | amount=100.00 | note=Bill pay – Car Savings Transfer | status=completed | payee_acc_no=341741106489
+id=txn_307301 | ts=1779302899 | from=acc_311865 | to=external | amount=300.00 | note=Travel payment | status=completed | payee_acc_no=
+id=txn_059440 | ts=1779302914 | from=acc_551489 | to=acc_311865 | amount=150.00 | note=Travel deposit | status=completed | payee_acc_no=
+id=txn_290508 | ts=1779303445 | from=acc_177863 | to=external | amount=210.00 | note=Car insurance | status=completed | payee_acc_no=
+id=txn_257197 | ts=1779303455 | from=external | to=acc_551489 | amount=100.00 | note=Insurance rebate | status=completed
+id=txn_537591 | ts=1779303482 | from=acc_551489 | to=acc_177863 | amount=100.00 | note=Checking deposit | status=completed | payee_acc_no=
+id=txn_997992 | ts=1779303494 | from=acc_177863 | to=external | amount=75.00 | note=Registration fee | status=completed | payee_acc_no=
+id=txn_843905 | ts=1779303571 | from=external | to=acc_050251 | amount=300.00 | note=Charity opening deposit | status=completed
+id=txn_093939 | ts=1779303600 | from=acc_177863 | to=acc_050251 | amount=200.00 | note=Charity deposit | status=completed | payee_acc_no=
+id=txn_646754 | ts=1779303616 | from=acc_311865 | to=acc_050251 | amount=200.00 | note=Charity deposit | status=completed | payee_acc_no=
+id=txn_335163 | ts=1779303648 | from=acc_050251 | to=external | amount=470.00 | note=Charity payment | status=completed | payee_acc_no=
+id=txn_630758 | ts=1779303687 | from=acc_551489 | to=acc_074954 | amount=150.00 | note=Emergency deposit | status=completed | payee_acc_no=
+id=txn_659165 | ts=1779303704 | from=acc_177863 | to=acc_074954 | amount=100.00 | note=Emergency deposit | status=completed | payee_acc_no=
+id=txn_488008 | ts=1779303716 | from=acc_177863 | to=acc_551489 | amount=250.00 | note=Savings deposit | status=completed | payee_acc_no=
+id=txn_090055 | ts=1779303724 | from=external | to=acc_551489 | amount=800.00 | note=Paycheck | status=completed
+id=txn_645936 | ts=1779303743 | from=acc_551489 | to=acc_177863 | amount=500.00 | note=Checking deposit | status=completed | payee_acc_no=
+
+[payees]
+id=pay_935326 | name=Landlord | acc_id=acc_177863 | amount=850.00 | payee_acc_no=702365753581
+id=pay_929048 | name=Electric Company | acc_id=acc_177863 | amount=62.40 | payee_acc_no=495011271825
+id=pay_394193 | name=Internet Provider | acc_id=acc_177863 | amount=54.97 | payee_acc_no=516352582761
+id=pay_390786 | name=Business Registration | acc_id=acc_904616 | amount=75.00 | payee_acc_no=509345689322
+id=pay_152559 | name=Gym Membership | acc_id=acc_551489 | amount=180.00 | payee_acc_no=848533901262
+id=pay_140232 | name=Car Savings Transfer | acc_id=acc_551489 | amount=100.00 | payee_acc_no=341741106489
+id=pay_666039 | name=Car Insurance | acc_id=acc_177863 | amount=210.00 | payee_acc_no=104549223458
+id=pay_493157 | name=Registration Fee | acc_id=acc_177863 | amount=75.00 | payee_acc_no=384023423423

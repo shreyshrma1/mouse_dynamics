@@ -1,0 +1,111 @@
+[meta]
+username=test
+password=9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+order=acc_913140,acc_599657,acc_220965,acc_936113
+
+[accounts]
+id=acc_913140 | type=Checking | name=Main Checking | balance=500.00
+id=acc_599657 | type=Savings | name=Main Savings | balance=562.45
+id=acc_936113 | type=Savings | name=Emergency Savings Fund | balance=500.00
+id=acc_220965 | type=Savings | name=Charity Fund | balance=200.00
+
+[transactions]
+id=txn_309409 | ts=1773946543 | from=external | to=acc_913140 | amount=2400.00 | note=Payroll deposit | status=completed
+id=txn_000867 | ts=1774119343 | from=acc_913140 | to=external | amount=850.00 | note=Rent payment | status=completed
+id=txn_941303 | ts=1774205743 | from=acc_913140 | to=external | amount=62.40 | note=Electric bill | status=completed
+id=txn_722061 | ts=1774378543 | from=acc_913140 | to=acc_599657 | amount=200.00 | note=Savings transfer | status=completed
+id=txn_960074 | ts=1774551343 | from=acc_913140 | to=external | amount=38.99 | note=Streaming subscriptions | status=completed
+id=txn_284314 | ts=1774724143 | from=acc_913140 | to=external | amount=124.50 | note=Grocery run | status=completed
+id=txn_605321 | ts=1774896943 | from=external | to=acc_913140 | amount=85.00 | note=Freelance payment | status=completed
+id=txn_418673 | ts=1775069743 | from=acc_913140 | to=external | amount=9.99 | note=Cloud storage | status=completed
+id=txn_717172 | ts=1775242543 | from=acc_913140 | to=external | amount=47.20 | note=Gas station | status=completed
+id=txn_788894 | ts=1775501743 | from=external | to=acc_913140 | amount=2400.00 | note=Payroll deposit | status=completed
+id=txn_851521 | ts=1775674543 | from=acc_913140 | to=external | amount=850.00 | note=Rent payment | status=completed
+id=txn_578093 | ts=1775760943 | from=acc_913140 | to=external | amount=62.40 | note=Electric bill | status=completed
+id=txn_420899 | ts=1775933743 | from=acc_913140 | to=acc_599657 | amount=200.00 | note=Savings transfer | status=completed
+id=txn_346889 | ts=1776106543 | from=acc_913140 | to=external | amount=210.00 | note=Car insurance | status=completed
+id=txn_557740 | ts=1776279343 | from=acc_913140 | to=external | amount=89.30 | note=Pharmacy | status=completed
+id=txn_560539 | ts=1776452143 | from=external | to=acc_599657 | amount=500.00 | note=Tax refund | status=completed
+id=txn_882482 | ts=1776624943 | from=acc_913140 | to=external | amount=34.00 | note=Dinner out | status=completed
+id=txn_833056 | ts=1776797743 | from=acc_913140 | to=external | amount=15.49 | note=Coffee shop | status=completed
+id=txn_045662 | ts=1776970543 | from=acc_913140 | to=external | amount=9.99 | note=Music subscription | status=completed
+id=txn_652424 | ts=1777229743 | from=external | to=acc_913140 | amount=2400.00 | note=Payroll deposit | status=completed
+id=txn_345925 | ts=1777402543 | from=acc_913140 | to=external | amount=850.00 | note=Rent payment | status=completed
+id=txn_682904 | ts=1777488943 | from=acc_913140 | to=external | amount=62.40 | note=Electric bill | status=completed
+id=txn_386295 | ts=1777661743 | from=acc_913140 | to=acc_599657 | amount=200.00 | note=Savings transfer | status=completed
+id=txn_639419 | ts=1777834543 | from=acc_913140 | to=external | amount=143.20 | note=Grocery run | status=completed
+id=txn_034652 | ts=1778007343 | from=acc_913140 | to=external | amount=55.00 | note=Internet bill | status=completed
+id=txn_779391 | ts=1778180143 | from=external | to=acc_913140 | amount=120.00 | note=Freelance payment | status=completed
+id=txn_343478 | ts=1778352943 | from=acc_913140 | to=external | amount=28.75 | note=Lunch | status=completed
+id=txn_788987 | ts=1778525743 | from=acc_913140 | to=external | amount=9.99 | note=Cloud storage | status=completed
+id=txn_422620 | ts=1778698543 | from=acc_913140 | to=external | amount=67.40 | note=Gas station | status=completed
+id=txn_784505 | ts=1778784943 | from=external | to=acc_913140 | amount=2400.00 | note=Payroll deposit | status=completed
+id=txn_270842 | ts=1778871343 | from=acc_913140 | to=external | amount=850.00 | note=Rent payment | status=completed
+id=txn_379411 | ts=1778957743 | from=acc_913140 | to=acc_599657 | amount=200.00 | note=Savings transfer | status=completed
+id=txn_547702 | ts=1779044143 | from=acc_913140 | to=external | amount=44.60 | note=Grocery run | status=completed
+id=txn_000268 | ts=1779130543 | from=external | to=acc_913140 | amount=18.50 | note=Refund | status=completed
+id=txn_322711 | ts=1779130682 | from=acc_599657 | to=acc_936113 | amount=200.00 | note=Emergency top-up | status=completed
+id=txn_172657 | ts=1779130698 | from=acc_599657 | to=acc_913140 | amount=300.00 | note=Travel investment | status=completed
+id=txn_859010 | ts=1779131312 | from=external | to=acc_913140 | amount=2400.00 | note=Paycheck | status=completed
+id=txn_354982 | ts=1779131333 | from=acc_913140 | to=acc_599657 | amount=300.00 | note=Savings deposit | status=completed
+id=txn_696096 | ts=1779131356 | from=acc_913140 | to=acc_786786 | amount=150.00 | note=Travel deposit | status=completed
+id=txn_139244 | ts=1779131372 | from=acc_913140 | to=acc_936113 | amount=200.00 | note=Emergency deposit | status=completed
+id=txn_740411 | ts=1779133529 | from=acc_913140 | to=external | amount=850.00 | note=Rent payment | status=completed
+id=txn_685122 | ts=1779133544 | from=acc_913140 | to=external | amount=62.40 | note=Electric bill | status=completed
+id=txn_451536 | ts=1779133555 | from=acc_913140 | to=external | amount=55.00 | note=Internet | status=completed
+id=txn_570998 | ts=1779133588 | from=acc_913140 | to=external | amount=38.99 | note=Streaming subscription | status=completed
+id=txn_154318 | ts=1779133606 | from=acc_913140 | to=external | amount=9.99 | note=Music subscription | status=completed
+id=txn_268792 | ts=1779133626 | from=acc_599657 | to=acc_913140 | amount=200.00 | note=Transfer to checking | status=completed
+id=txn_973458 | ts=1779133660 | from=acc_936113 | to=acc_913140 | amount=200.00 | note=Medical bill transfer | status=completed
+id=txn_775300 | ts=1779133676 | from=acc_913140 | to=external | amount=200.00 | note=Hospital | status=completed
+id=txn_654856 | ts=1779133691 | from=acc_599657 | to=acc_936113 | amount=200.00 | note=Emergency deposit | status=completed
+id=txn_591375 | ts=1779133713 | from=external | to=acc_599657 | amount=300.00 | note=Savings deposit | status=completed
+id=txn_861087 | ts=1779134168 | from=external | to=acc_123103 | amount=200.00 | note=Starting deposit | status=completed
+id=txn_094883 | ts=1779134193 | from=acc_913140 | to=acc_123103 | amount=100.00 | note=Startup deposit | status=completed
+id=txn_278175 | ts=1779134218 | from=acc_599657 | to=acc_123103 | amount=75.00 | note=Startup deposit | status=completed
+id=txn_496063 | ts=1779134278 | from=acc_599657 | to=acc_786786 | amount=100.00 | note=Travel deposit | status=completed
+id=txn_475781 | ts=1779134300 | from=acc_913140 | to=acc_786786 | amount=50.00 | note=Travel deposit | status=completed
+id=txn_149360 | ts=1779134312 | from=external | to=acc_786786 | amount=50.00 | note=Friend sponsorship | status=completed
+id=txn_839144 | ts=1779135934 | from=external | to=acc_599657 | amount=1500.00 | note=Direct Deposit | status=completed
+id=txn_891541 | ts=1779135957 | from=acc_599657 | to=acc_913140 | amount=1200.00 | note=Checking deposit | status=completed
+id=txn_201798 | ts=1779135973 | from=external | to=acc_599657 | amount=1200.00 | note=Direct Deposit | status=completed
+id=txn_703139 | ts=1779135991 | from=acc_599657 | to=acc_936113 | amount=400.00 | note=Emergency deposit | status=completed
+id=txn_021235 | ts=1779136012 | from=acc_599657 | to=acc_123103 | amount=300.00 | note=Startup deposit | status=completed
+id=txn_785018 | ts=1779136028 | from=acc_599657 | to=acc_786786 | amount=100.00 | note=Travel deposit | status=completed
+id=txn_480674 | ts=1779136047 | from=acc_913140 | to=external | amount=45.00 | note=Subscription | status=completed
+id=txn_856893 | ts=1779136064 | from=acc_913140 | to=external | amount=28.00 | note=Lunch expense | status=completed
+id=txn_003059 | ts=1779136900 | from=acc_123103 | to=acc_599657 | amount=1248.62 | note=Closing transfer | status=completed
+id=txn_661579 | ts=1779136945 | from=external | to=acc_041081 | amount=350.00 | note=Opening deposit | status=completed
+id=txn_760369 | ts=1779136970 | from=acc_913140 | to=acc_041081 | amount=125.00 | note=Car deposit | status=completed
+id=txn_178781 | ts=1779136996 | from=acc_599657 | to=acc_041081 | amount=300.00 | note=Car deposit | status=completed
+id=txn_880225 | ts=1779137017 | from=acc_786786 | to=external | amount=300.00 | note=Ski trip payment | status=completed
+id=txn_393682 | ts=1779137034 | from=acc_599657 | to=acc_786786 | amount=100.00 | note=Travel deposit | status=completed
+id=txn_126506 | ts=1779138103 | from=external | to=acc_220965 | amount=300.00 | note=Deposit | status=completed
+id=txn_002564 | ts=1779138132 | from=acc_913140 | to=acc_220965 | amount=500.00 | note=Charity deposit | status=completed
+id=txn_269829 | ts=1779138159 | from=acc_786786 | to=acc_220965 | amount=200.00 | note=Charity deposit | status=completed
+id=txn_676686 | ts=1779138186 | from=acc_220965 | to=external | amount=800.00 | note=Donation to charity | status=completed
+id=txn_975491 | ts=1779138205 | from=acc_913140 | to=acc_599657 | amount=250.00 | note=Savings contribution | status=completed
+id=txn_536118 | ts=1779138224 | from=external | to=acc_913140 | amount=500.00 | note=Paycheck | status=completed
+id=txn_256669 | ts=1779138923 | from=acc_786786 | to=acc_599657 | amount=332.77 | note=Clear travel fund | status=completed
+id=txn_642808 | ts=1779138949 | from=acc_220965 | to=external | amount=200.00 | note=Charity | status=completed
+id=txn_020780 | ts=1779138977 | from=acc_599657 | to=acc_041081 | amount=2500.00 | note=Car deposit | status=completed
+id=txn_028137 | ts=1779138993 | from=acc_913140 | to=acc_041081 | amount=1750.00 | note=Car deposit | status=completed
+id=txn_590690 | ts=1779139052 | from=acc_936113 | to=acc_041081 | amount=1600.00 | note=Car deposit | status=completed
+id=txn_345570 | ts=1779139067 | from=external | to=acc_913140 | amount=150000.00 | note=Bonus | status=completed
+id=txn_802491 | ts=1779139085 | from=acc_913140 | to=acc_599657 | amount=1000.00 | note=Savings deposit | status=completed
+id=txn_276737 | ts=1779139106 | from=acc_913140 | to=acc_041081 | amount=135000.00 | note=Car deposit | status=completed
+id=txn_054900 | ts=1779139133 | from=acc_913140 | to=acc_220965 | amount=14000.00 | note=Charity | status=completed
+id=txn_669655 | ts=1779139181 | from=acc_220965 | to=external | amount=14000.00 | note=make a wish | status=completed
+id=txn_764081 | ts=1779139239 | from=external | to=acc_290035 | amount=250000000.00 | note=Deposit | status=completed
+id=txn_114065 | ts=1779139272 | from=acc_290035 | to=acc_220965 | amount=25.00 | note=charity | status=completed
+id=txn_678345 | ts=1779139290 | from=acc_220965 | to=external | amount=25.00 | note=unicef | status=completed
+id=txn_840399 | ts=1779139320 | from=acc_290035 | to=acc_041081 | amount=200000000.00 | note=Car deposit | status=completed
+id=txn_515785 | ts=1779139351 | from=acc_041081 | to=acc_913140 | amount=200141625.00 | note=Car | status=completed
+id=txn_439612 | ts=1779139399 | from=acc_913140 | to=external | amount=200100000.00 | note=Koenigsegg | status=completed
+id=txn_353699 | ts=1779139426 | from=acc_290035 | to=acc_913140 | amount=49000000.00 | note=Yacht money | status=completed
+id=txn_062418 | ts=1779139449 | from=acc_913140 | to=external | amount=49040000.00 | note=Yacht payment | status=completed
+id=txn_993031 | ts=1779139474 | from=acc_290035 | to=acc_913140 | amount=999975.00 | note=Food | status=completed
+id=txn_475976 | ts=1779139497 | from=acc_913140 | to=external | amount=1001938.82 | note=Flaming Kumba | status=completed
+id=txn_491887 | ts=1779139515 | from=acc_599657 | to=acc_913140 | amount=500.00 | note=Checking deposit | status=completed
+id=txn_809642 | ts=1779139541 | from=acc_599657 | to=acc_220965 | amount=200.00 | note=Charity deposit | status=completed
+id=txn_238063 | ts=1779139575 | from=acc_599657 | to=acc_936113 | amount=468.72 | note=Emergency deposit | status=completed

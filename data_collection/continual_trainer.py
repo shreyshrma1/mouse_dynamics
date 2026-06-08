@@ -1,42 +1,52 @@
 """
-continual_trainer.py
+continual_trainer_shen_scroll.py
 
-Continuously trains the OCSVM fusion model as new mouse data is collected.
-Called by MouseCollector after each session flush.
+Continuously trains the Shen OCSVM model as new mouse data is collected.
+Called by MouseCollector after each session flush (every ~1 minute).
 
 Architecture:
-  - Each new session is feature-extracted (39-feat + Zheng)
-  - Features are appended to a replay buffer (deque with max size)
-  - Model is retrained on the full replay buffer after each update
-  - Trained model + scalers are saved to disk for authentication
+  - Each new session is feature-extracted (39 holistic + scroll features)
+  - System operates in one of two modes:
 
-The replay buffer prevents catastrophic forgetting — training always
-uses all historical data up to buffer_size sessions, not just the latest.
+    EVALUATING (first EVAL_SESSIONS sessions):
+      Windows are collected into an eval buffer but NOT used for training.
+      After EVAL_SESSIONS sessions, a consensus vote is run:
+        - If acceptance rate >= ACCEPT_THRESHOLD → user is legitimate →
+          transition to TRAINING mode, fold eval windows into replay buffer,
+          retrain the pre-loaded model on the combined data.
+        - If acceptance rate < ACCEPT_THRESHOLD → user is flagged as an
+          impostor → alert is printed to terminal and the program terminates.
+
+    TRAINING (all sessions after legitimacy is confirmed):
+      Windows are appended to a replay buffer and the model is retrained
+      after every session. The replay buffer prevents catastrophic forgetting.
+
+  This separation ensures that impostor samples are never used to train
+  the one-class model, which would corrupt the learned legitimate boundary.
+
+Flush / session assumptions:
+  - MouseCollector flushes every ~1 minute → 1 session ≈ 1 minute of data
+  - EVAL_SESSIONS = 2  →  ~2 minutes of data used for initial evaluation
+  - Pre-loaded model (trained offline) is used during evaluation phase
+
+Matches the Shen et al. preprocessing pipeline:
+  raw features → find_reference → distance vectors → normalize → OCSVM
 
 Usage:
-    trainer = ContinualTrainer(user_id="shrey")
-    collector = MouseCollector(user_id="shrey", flush_interval=300)
-    collector.start(trainer=trainer)
+    trainer = ContinualTrainerShenScroll(user_id="shrey")
+    trainer.load()                       # load pre-trained model from disk
+    trainer.update(session_path)         # call after every flush
 """
 
 import os
 import sys
 import joblib
 import numpy as np
-import pandas as pd
 from collections import deque
-from sklearn.svm import OneClassSVM
-from sklearn.preprocessing import StandardScaler
-from sklearn.decomposition import KernelPCA
 
-# add measurements/ to path so we can import extractors
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from measurements.extract_features_sess import extract_session_features
-from measurements.extract_zheng_features import (load_session, segment_pc_actions,
-                                                 compute_curvature_angles, compute_curvature_distances,
-                                                 ANGLE_BINS, DIST_BINS, DIST_MAX)
 
-FEATURE_COLS_39 = [
+FEATURE_COLS_HOLISTIC = [
     "type_of_action","traveled_distance_pixel","elapsed_time",
     "direction_of_movement","straightness","num_points","sum_of_angles",
     "mean_curv","sd_curv","max_curv","min_curv",
@@ -48,272 +58,241 @@ FEATURE_COLS_39 = [
     "mean_a","sd_a","max_a","min_a",
     "mean_jerk","sd_jerk","max_jerk","min_jerk","a_beg_time"
 ]
-FEATURE_COLS_ZHENG = [f"ca_{i}" for i in range(180)] + [f"cd_{i}" for i in range(35)]
 
-# minimum windows before training is attempted
-MIN_SESSIONS_39 = 3
-MIN_SESSIONS_ZHENG = 3
+SCROLL_COLS = [
+    "scroll_count","scroll_rate","scroll_ratio","scroll_up_ratio",
+    "scroll_dur_mean","scroll_dur_std",
+    "scroll_burst_count","scroll_burst_dur_mean","scroll_burst_len_mean",
+]
+
+MIN_WINDOWS   = 8    # minimum windows in replay buffer before (re)training
+EVAL_SESSIONS = 2    # number of sessions used for initial evaluation
+ACCEPT_THRESHOLD = 0.50  # minimum acceptance rate to pass evaluation
+                          # set low (0.50) to account for 28% FRR on legitimate users
+
+# Mode constants
+MODE_EVALUATING = "EVALUATING"
+MODE_TRAINING   = "TRAINING"
 
 
-class ContinualTrainer:
+class ContinualTrainerShenScroll:
     def __init__(
         self,
         user_id,
-        save_dir="checkpoints_ocsvm",
+        save_dir="checkpoints_shen_scroll_continual",
         buffer_size=50,
-        window_size=200,
-        nu=0.05,
+        window_size=5,
+        nu=0.06,
         gamma="scale",
-        use_kpca=True,
-        kpca_kernel="rbf",
-        kpca_gamma=None,
-        kpca_variance=0.95,
+        more_scroll=False,
+        dir_scroll=False,
     ):
-        """
-        Args:
-            user_id:      user that is being identified
-            save_dir:     directory to save trained models and scalers
-            buffer_size:  maximum number of windows to keep in the replay buffer
-            window_size:  number of PC/DD actions per window for Zheng histograms
-            nu:           OCSVM nu — upper bound on fraction of training data
-                          allowed outside the boundary (try 0.05–0.15)
-            gamma:        OCSVM RBF kernel width; "scale" lets sklearn compute it
-            use_kpca:     whether to apply Kernel PCA before OCSVM
-            kpca_kernel:  kernel for KPCA (default "rbf")
-            kpca_gamma:   gamma for KPCA kernel (None = sklearn default)
-            kpca_variance: fraction of eigenvalue mass to retain (default 0.95)
-        """
-        self.user_id = user_id
-        self.save_dir = save_dir
+        self.user_id     = user_id
+        self.save_dir    = save_dir
         self.window_size = window_size
-        self.nu = nu
-        self.gamma = gamma
-
-        self.use_kpca = use_kpca
-        self.kpca_kernel = kpca_kernel
-        self.kpca_gamma = kpca_gamma
-        self.kpca_variance = kpca_variance
-
-        self.kpca_39 = None
-        self.kpca_n_components_39 = None
-        self.kpca_zheng = None
-        self.kpca_n_components_zheng = None
+        self.nu          = nu
+        self.gamma       = gamma
+        self.more_scroll = more_scroll
+        self.dir_scroll  = dir_scroll
 
         os.makedirs(save_dir, exist_ok=True)
 
-        # replay buffers — one entry per window, each a numpy array of feature rows
-        self.buffer_39 = deque(maxlen=buffer_size)
-        self.buffer_zheng = deque(maxlen=buffer_size)
+        self.buffer      = deque(maxlen=buffer_size)
+        self.model       = None
+        self.reference   = None
+        self.dist_mean   = None
+        self.dist_std    = None
+        self.n_sessions  = 0
 
-        # trained models (None until enough data is available)
-        self.models_39 = None
-        self.scaler_39 = None
-        self.models_zheng = None
-        self.scaler_zheng = None
-
-        # session counter for logging
-        self.n_sessions = 0
+        # Evaluation phase state
+        self.mode        = MODE_EVALUATING
+        self.eval_buffer = []   # windows collected during evaluation (not yet in replay buffer)
+        self.eval_scores = []   # per-window boolean: True = accepted, False = rejected
 
     # ── Feature extraction ────────────────────────────────────────────────
 
-    def _extract_39(self, session_path):
-        """Extract 39 features from a session file, split into windows."""
+    def _feature_cols(self):
+        from measurements.extract_features_scroll import MORE_SCROLL_COLS, DIR_SCROLL_COLS
+        return (FEATURE_COLS_HOLISTIC + SCROLL_COLS
+                + (MORE_SCROLL_COLS if self.more_scroll else [])
+                + (DIR_SCROLL_COLS  if self.dir_scroll  else []))
+
+    def _extract_windows(self, session_path):
+        from measurements.extract_features_scroll import extract_session_features
+        feature_cols = self._feature_cols()
+        all_vecs = []
         try:
-            df = extract_session_features(session_path, self.user_id,
-                                          window_size=self.window_size)
-            df = df.replace([np.inf, -np.inf], np.nan).dropna(subset=FEATURE_COLS_39)
+            df = extract_session_features(
+                session_path, self.user_id,
+                window_size=self.window_size,
+                more_scroll=self.more_scroll,
+                dir_scroll=self.dir_scroll,
+            )
+            df = df.replace([np.inf, -np.inf], np.nan).dropna(subset=feature_cols)
             if len(df) == 0:
                 return []
-            windows = []
             for _, grp in df.groupby("session"):
-                x = grp[FEATURE_COLS_39].values
-                if len(x) >= 5:
-                    windows.append(x)
-            return windows
+                rows = grp[feature_cols].values
+                if len(rows) >= 1:
+                    all_vecs.append(rows.mean(axis=0))
         except Exception as e:
-            print(f"[Trainer] 39-feat extraction failed: {e}")
-            return []
+            print(f"[Trainer] Extraction failed for {session_path}: {e}")
+        return all_vecs
 
-    def _extract_zheng(self, session_path):
-        """Extract Zheng histograms from a session file, one per window."""
-        try:
-            session_df = load_session(session_path)
-            actions = segment_pc_actions(session_df)
-            rows = []
-            for start in range(0, len(actions), self.window_size):
-                window = actions[start: start + self.window_size]
-                if len(window) < 5:
-                    continue
-                all_angles, all_dists = [], []
-                for events in window:
-                    all_angles.extend(compute_curvature_angles(events).tolist())
-                    all_dists.extend(compute_curvature_distances(events).tolist())
-                if not all_angles:
-                    continue
-                angle_hist, _ = np.histogram(
-                    np.array(all_angles), bins=ANGLE_BINS,
-                    range=(0, 180), density=True)
-                dist_hist, _ = np.histogram(
-                    np.clip(np.array(all_dists), 0, DIST_MAX),
-                    bins=DIST_BINS, range=(0, DIST_MAX), density=True)
-                vec = np.concatenate([
-                    np.nan_to_num(angle_hist),
-                    np.nan_to_num(dist_hist)
-                ])
-                rows.append(vec)
-            print(f"[Trainer] Zheng extracted {len(rows)} windows from {session_path}")
-            return rows
-        except Exception as e:
-            print(f"[Trainer] Zheng extraction failed: {e}")
-            return []
+    # ── Shen preprocessing ────────────────────────────────────────────────
 
-    # ── KPCA ─────────────────────────────────────────────────────────────
+    @staticmethod
+    def _find_reference(train_samples):
+        n = len(train_samples)
+        mean_dists = np.zeros(n)
+        for i in range(n):
+            dists = np.sum(np.abs(train_samples - train_samples[i]), axis=1)
+            mean_dists[i] = dists.sum() / max(n - 1, 1)
+        return train_samples[np.argmin(mean_dists)]
 
-    def _fit_kpca(self, x_sc):
-        """
-        Fit KernelPCA retaining enough components to explain kpca_variance
-        of the eigenvalue mass.
+    @staticmethod
+    def _distance_vectors(samples, reference):
+        return np.abs(np.atleast_2d(samples) - reference)
 
-        Returns:
-            kpca, x_kpca, n_components
-        """
-        if not self.use_kpca:
-            return None, x_sc, None
+    @staticmethod
+    def _normalize(dist_vecs, mean, std):
+        std_safe = np.where(std < 1e-9, 1.0, std)
+        return (dist_vecs - mean) / std_safe
 
-        max_components = min(x_sc.shape[0] - 1, x_sc.shape[1])
-        if max_components < 1:
-            return None, x_sc, None
-
-        kpca = KernelPCA(
-            n_components=max_components,
-            kernel=self.kpca_kernel,
-            gamma=self.kpca_gamma,
-            fit_inverse_transform=False,
-        )
-        x_full = kpca.fit_transform(x_sc)
-
-        eigvals = getattr(kpca, "eigenvalues_", None)
-        if eigvals is None:
-            eigvals = getattr(kpca, "lambdas_", None)
-
-        if eigvals is None or np.sum(eigvals) <= 1e-12:
-            n_components = x_full.shape[1]
-        else:
-            explained = np.cumsum(eigvals) / np.sum(eigvals)
-            n_components = int(np.searchsorted(explained, self.kpca_variance) + 1)
-
-        n_components = max(1, min(n_components, x_full.shape[1]))
-        x_kpca = x_full[:, :n_components]
-
-        return kpca, x_kpca, n_components
-
-    def _transform_kpca(self, kpca, x_sc, n_components):
-        """Transform scaled features through fitted KPCA."""
-        if kpca is None:
-            return x_sc
-        return kpca.transform(x_sc)[:, :n_components]
+    def _preprocess(self, vecs):
+        """Apply reference → distance → normalize using stored stats."""
+        d = self._distance_vectors(np.array(vecs), self.reference)
+        return self._normalize(d, self.dist_mean, self.dist_std)
 
     # ── Training ──────────────────────────────────────────────────────────
 
-    def _train_pipeline(self, x_train):
+    def _retrain(self):
+        from sklearn.svm import OneClassSVM
+
+        train_samples = np.array(list(self.buffer))
+
+        self.reference = self._find_reference(train_samples)
+        train_dists    = self._distance_vectors(train_samples, self.reference)
+        self.dist_mean = train_dists.mean(axis=0)
+        self.dist_std  = train_dists.std(axis=0)
+        train_norm     = self._normalize(train_dists, self.dist_mean, self.dist_std)
+
+        self.model = OneClassSVM(kernel="rbf", nu=self.nu, gamma=self.gamma)
+        self.model.fit(train_norm)
+
+        scores = self.model.decision_function(train_norm)
+        print(f"[Trainer] Model retrained on {len(train_samples)} windows — "
+              f"scores: min={scores.min():.4f}, mean={scores.mean():.4f}, "
+              f"max={scores.max():.4f}")
+
+    # ── Evaluation phase logic ────────────────────────────────────────────
+
+    def _score_windows(self, windows):
         """
-        Fit StandardScaler -> KPCA -> OCSVM.
-
-        The OCSVM decision function is used directly at inference time:
-          positive  = inside boundary  -> ACCEPT
-          negative  = outside boundary -> REJECT
-
-        Returns:
-            models, scaler, kpca, n_components
+        Score a list of windows against the current model.
+        Returns (per_window_accepted: list[bool], mean_score: float).
+        Requires model to be loaded (pre-trained model used during eval phase).
         """
-        x_train = np.asarray(x_train, dtype=float)
+        x_norm  = self._preprocess(windows)
+        scores  = self.model.decision_function(x_norm)
+        accepted = [float(s) >= 0 for s in scores]
+        return accepted, float(scores.mean())
 
-        scaler = StandardScaler()
-        x_sc = scaler.fit_transform(x_train)
+    def _evaluate_and_decide(self):
+        """
+        Called after EVAL_SESSIONS sessions have been collected.
+        Computes consensus acceptance rate over all eval windows and
+        either transitions to TRAINING mode or terminates the program.
+        """
+        total    = len(self.eval_scores)
+        n_accept = sum(self.eval_scores)
+        rate     = n_accept / total if total > 0 else 0.0
 
-        kpca, x_proj, n_components = self._fit_kpca(x_sc)
+        print(f"\n[Trainer] ── Evaluation complete ──────────────────────────")
+        print(f"[Trainer]   Windows evaluated : {total}")
+        print(f"[Trainer]   Accepted          : {n_accept}  ({rate*100:.1f}%)")
+        print(f"[Trainer]   Threshold         : {ACCEPT_THRESHOLD*100:.0f}%")
 
-        model = OneClassSVM(kernel="rbf", nu=self.nu, gamma=self.gamma)
-        model.fit(x_proj)
+        if rate >= ACCEPT_THRESHOLD:
+            print(f"[Trainer]   Verdict           : LEGITIMATE ✓")
+            print(f"[Trainer] Transitioning to TRAINING mode.")
+            print(f"[Trainer] ────────────────────────────────────────────────\n")
 
-        print(
-            f"[Trainer] Model trained with nu={self.nu}, gamma={self.gamma}, "
-            f"kpca_components={n_components}, n_samples={len(x_train)}"
-        )
+            # Fold eval windows into the replay buffer and retrain
+            self.mode = MODE_TRAINING
+            for w in self.eval_buffer:
+                self.buffer.append(w)
+            self.eval_buffer.clear()
 
-        return {"ocsvm": model}, scaler, kpca, n_components
-
-    def _retrain_39(self):
-        all_rows = np.vstack(list(self.buffer_39))
-        if len(all_rows) < 10:
-            return
-        (
-            self.models_39,
-            self.scaler_39,
-            self.kpca_39,
-            self.kpca_n_components_39,
-        ) = self._train_pipeline(all_rows)
-
-        # log training scores so we know where the boundary sits
-        x_sc = self.scaler_39.transform(all_rows)
-        x_proj = self._transform_kpca(self.kpca_39, x_sc, self.kpca_n_components_39)
-        scores = self.models_39["ocsvm"].decision_function(x_proj)
-        print(
-            f"[Trainer] 39-feat training scores — "
-            f"min={scores.min():.4f}, mean={scores.mean():.4f}, max={scores.max():.4f}"
-        )
-
-    def _retrain_zheng(self):
-        x_train = np.vstack(list(self.buffer_zheng))
-        if len(x_train) < 2:
-            return
-        (
-            self.models_zheng,
-            self.scaler_zheng,
-            self.kpca_zheng,
-            self.kpca_n_components_zheng,
-        ) = self._train_pipeline(x_train)
-
-        x_sc = self.scaler_zheng.transform(x_train)
-        x_proj = self._transform_kpca(self.kpca_zheng, x_sc, self.kpca_n_components_zheng)
-        scores = self.models_zheng["ocsvm"].decision_function(x_proj)
-        print(
-            f"[Trainer] Zheng training scores — "
-            f"min={scores.min():.4f}, mean={scores.mean():.4f}, max={scores.max():.4f}"
-        )
+            if len(self.buffer) >= MIN_WINDOWS:
+                self._retrain()
+            else:
+                print(f"[Trainer] Buffer has {len(self.buffer)} windows; "
+                      f"need {MIN_WINDOWS} before retraining.")
+        else:
+            print(f"[Trainer]   Verdict           : IMPOSTOR ✗")
+            print(f"[Trainer] ────────────────────────────────────────────────")
+            print(f"\n[SECURITY ALERT] Impostor detected for user '{self.user_id}'.")
+            print(f"[SECURITY ALERT] Session terminated.")
+            sys.exit(1)
 
     # ── Public interface ──────────────────────────────────────────────────
 
     def update(self, session_path):
-        """Called by MouseCollector after each session flush."""
+        """
+        Called by MouseCollector after each session flush (~1 minute).
+
+        EVALUATING mode: score windows against the pre-loaded model and
+            accumulate evidence. After EVAL_SESSIONS sessions, decide.
+        TRAINING mode: append windows to replay buffer and retrain.
+        """
         self.n_sessions += 1
-        print(f"[Trainer] Processing session {self.n_sessions}: {session_path}")
+        print(f"[Trainer] Session {self.n_sessions} | mode={self.mode} | {session_path}")
 
-        windows_39 = self._extract_39(session_path)
-        windows_zheng = self._extract_zheng(session_path)
+        windows = self._extract_windows(session_path)
+        if not windows:
+            print(f"[Trainer] No windows extracted — skipping session.")
+            return
 
-        for w in windows_39:
-            self.buffer_39.append(w)
-        for w in windows_zheng:
-            self.buffer_zheng.append(w)
+        if self.mode == MODE_EVALUATING:
+            if self.model is None:
+                # No pre-trained model available — cannot evaluate.
+                # Accumulate silently and wait; this shouldn't happen in
+                # normal operation where load() is called before update().
+                print(f"[Trainer] WARNING: No model loaded for evaluation. "
+                      f"Accumulating session {self.n_sessions} without scoring.")
+                self.eval_buffer.extend(windows)
+            else:
+                accepted, mean_score = self._score_windows(windows)
+                self.eval_buffer.extend(windows)
+                self.eval_scores.extend(accepted)
 
-        print(f"[Trainer] Buffer: {len(self.buffer_39)} 39-feat windows, "
-              f"{len(self.buffer_zheng)} Zheng windows")
+                n_accept = sum(accepted)
+                print(f"[Trainer] Eval session {self.n_sessions}/{EVAL_SESSIONS}: "
+                      f"{n_accept}/{len(accepted)} windows accepted "
+                      f"(mean score {mean_score:+.4f})")
 
-        if len(self.buffer_39) >= MIN_SESSIONS_39:
-            self._retrain_39()
-        else:
-            print(f"[Trainer] Need {MIN_SESSIONS_39 - len(self.buffer_39)} more windows before 39-feat model trains")
+            if self.n_sessions >= EVAL_SESSIONS:
+                self._evaluate_and_decide()
 
-        if len(self.buffer_zheng) >= MIN_SESSIONS_ZHENG:
-            self._retrain_zheng()
-        else:
-            print(f"[Trainer] Need {MIN_SESSIONS_ZHENG - len(self.buffer_zheng)} more windows before Zheng model trains")
+        else:  # MODE_TRAINING
+            for w in windows:
+                self.buffer.append(w)
+
+            print(f"[Trainer] Buffer: {len(self.buffer)} windows")
+
+            if len(self.buffer) >= MIN_WINDOWS:
+                self._retrain()
+            else:
+                print(f"[Trainer] Need {MIN_WINDOWS - len(self.buffer)} more windows before retraining.")
 
         self._save()
 
     def backfill(self, data_dir):
-        """Reprocess all existing session files and refill the replay buffer."""
+        """
+        Reprocess all existing session files and refill the replay buffer.
+        Only meaningful when already in TRAINING mode (e.g. after a restart).
+        """
         user_dir = os.path.join(data_dir, self.user_id)
         if not os.path.isdir(user_dir):
             print(f"[Trainer] No data directory found at {user_dir}")
@@ -326,185 +305,136 @@ class ContinualTrainer:
         ])
         print(f"[Trainer] Backfilling from {len(files)} session files...")
 
-        self.buffer_39.clear()
-        self.buffer_zheng.clear()
-
+        self.buffer.clear()
         for path in files:
-            for w in self._extract_39(path):
-                self.buffer_39.append(w)
-            for w in self._extract_zheng(path):
-                self.buffer_zheng.append(w)
+            for w in self._extract_windows(path):
+                self.buffer.append(w)
 
-        print(f"[Trainer] Backfill complete: {len(self.buffer_39)} 39-feat windows, "
-              f"{len(self.buffer_zheng)} Zheng windows")
+        print(f"[Trainer] Backfill complete: {len(self.buffer)} windows")
 
-        if len(self.buffer_39) >= MIN_SESSIONS_39:
-            self._retrain_39()
+        if len(self.buffer) >= MIN_WINDOWS:
+            self._retrain()
         else:
-            print(f"[Trainer] Need {MIN_SESSIONS_39 - len(self.buffer_39)} more 39-feat windows")
-
-        if len(self.buffer_zheng) >= MIN_SESSIONS_ZHENG:
-            self._retrain_zheng()
-        else:
-            print(f"[Trainer] Need {MIN_SESSIONS_ZHENG - len(self.buffer_zheng)} more Zheng windows")
+            print(f"[Trainer] Need {MIN_WINDOWS - len(self.buffer)} windows")
 
         self._save()
 
     def score(self, session_path):
         """
-        Score a session. Uses the raw OCSVM decision function:
-          positive -> inside boundary -> ACCEPT
-          negative -> outside boundary -> REJECT
+        Score a session against the trained model.
+        Intended for ad-hoc evaluation outside the update() loop.
 
         Returns:
-            (fused_score, accepted) or (None, None) if no model is ready
+            (mean_score, accepted) or (None, None) if model not ready.
+            Positive score = inside boundary = ACCEPT.
+            Negative score = outside boundary = REJECT.
         """
-        if self.models_39 is None and self.models_zheng is None:
-            print("[Trainer] Models not yet trained — collecting more data")
+        if self.model is None:
+            print("[Trainer] Model not yet trained — collecting more data")
             return None, None
 
-        scores = []
-
-        if self.models_39 is not None:
-            windows_39 = self._extract_39(session_path)
-            if windows_39:
-                x = np.vstack(windows_39)
-                x_sc = self.scaler_39.transform(x)
-                x_proj = self._transform_kpca(self.kpca_39, x_sc, self.kpca_n_components_39)
-                s = float(self.models_39["ocsvm"].decision_function(x_proj).mean())
-                accepted_39 = s >= 0
-                print(
-                    f"[Trainer] 39-feat score: {s:.4f} → "
-                    f"{'ACCEPT' if accepted_39 else 'REJECT'}"
-                )
-                scores.append(s)
-
-        if self.models_zheng is not None:
-            windows_zheng = self._extract_zheng(session_path)
-            if windows_zheng:
-                x = np.vstack(windows_zheng)
-                x_sc = self.scaler_zheng.transform(x)
-                x_proj = self._transform_kpca(self.kpca_zheng, x_sc, self.kpca_n_components_zheng)
-                s = float(self.models_zheng["ocsvm"].decision_function(x_proj).mean())
-                accepted_zh = s >= 0
-                print(
-                    f"[Trainer] Zheng score:   {s:.4f} → "
-                    f"{'ACCEPT' if accepted_zh else 'REJECT'}"
-                )
-                scores.append(s)
-
-        if not scores:
+        windows = self._extract_windows(session_path)
+        if not windows:
+            print("[Trainer] No windows extracted from session")
             return None, None
 
-        fused = float(np.mean(scores))
-        accepted = fused >= 0
-        print(f"[Trainer] Fused score: {fused:+.4f} → {'ACCEPTED' if accepted else 'REJECTED'}")
-        return fused, accepted
+        accepted, mean_score = self._score_windows(windows)
+        n_accept = sum(accepted)
+        verdict  = "ACCEPTED" if mean_score >= 0 else "REJECTED"
+        print(f"[Trainer] Score: {mean_score:+.4f} → {verdict} "
+              f"({n_accept}/{len(accepted)} windows accepted)")
+
+        return mean_score, mean_score >= 0
 
     # ── Persistence ───────────────────────────────────────────────────────
 
     def _save(self):
-        """Save models, scalers, KPCA objects, and replay buffers to disk."""
         path = os.path.join(self.save_dir, self.user_id)
         os.makedirs(path, exist_ok=True)
 
-        if self.models_39 is not None:
-            joblib.dump(self.models_39, os.path.join(path, "models_39.pkl"))
-            joblib.dump(self.scaler_39, os.path.join(path, "scaler_39.pkl"))
-        if self.models_zheng is not None:
-            joblib.dump(self.models_zheng, os.path.join(path, "models_zheng.pkl"))
-            joblib.dump(self.scaler_zheng, os.path.join(path, "scaler_zheng.pkl"))
-        if self.kpca_39 is not None:
-            joblib.dump(self.kpca_39, os.path.join(path, "kpca_39.pkl"))
-        if self.kpca_zheng is not None:
-            joblib.dump(self.kpca_zheng, os.path.join(path, "kpca_zheng.pkl"))
+        if self.model is not None:
+            joblib.dump(self.model, os.path.join(path, "model.pkl"))
 
         joblib.dump({
-            "buffer_39":              list(self.buffer_39),
-            "buffer_zheng":           list(self.buffer_zheng),
-            "n_sessions":             self.n_sessions,
-            "nu":                     self.nu,
-            "gamma":                  self.gamma,
-            "use_kpca":               self.use_kpca,
-            "kpca_kernel":            self.kpca_kernel,
-            "kpca_gamma":             self.kpca_gamma,
-            "kpca_variance":          self.kpca_variance,
-            "kpca_n_components_39":   self.kpca_n_components_39,
-            "kpca_n_components_zheng":self.kpca_n_components_zheng,
+            "buffer":      list(self.buffer),
+            "reference":   self.reference,
+            "dist_mean":   self.dist_mean,
+            "dist_std":    self.dist_std,
+            "n_sessions":  self.n_sessions,
+            "nu":          self.nu,
+            "gamma":       self.gamma,
+            "window_size": self.window_size,
+            "more_scroll": self.more_scroll,
+            "dir_scroll":  self.dir_scroll,
+            "mode":        self.mode,
+            "eval_buffer": self.eval_buffer,
+            "eval_scores": self.eval_scores,
         }, os.path.join(path, "state.pkl"))
 
     def load(self):
-        """Load previously saved models and buffers from disk."""
         path = os.path.join(self.save_dir, self.user_id)
 
         try:
             state = joblib.load(os.path.join(path, "state.pkl"))
-            self.buffer_39    = deque(state["buffer_39"],    maxlen=self.buffer_39.maxlen)
-            self.buffer_zheng = deque(state["buffer_zheng"], maxlen=self.buffer_zheng.maxlen)
-            self.n_sessions   = state["n_sessions"]
-            self.nu           = state.get("nu",           self.nu)
-            self.gamma        = state.get("gamma",        self.gamma)
-            self.use_kpca     = state.get("use_kpca",     self.use_kpca)
-            self.kpca_kernel  = state.get("kpca_kernel",  self.kpca_kernel)
-            self.kpca_gamma   = state.get("kpca_gamma",   self.kpca_gamma)
-            self.kpca_variance= state.get("kpca_variance",self.kpca_variance)
-            self.kpca_n_components_39    = state.get("kpca_n_components_39",    None)
-            self.kpca_n_components_zheng = state.get("kpca_n_components_zheng", None)
+            self.buffer      = deque(state["buffer"], maxlen=self.buffer.maxlen)
+            self.reference   = state.get("reference")
+            self.dist_mean   = state.get("dist_mean")
+            self.dist_std    = state.get("dist_std")
+            self.n_sessions  = state.get("n_sessions",  0)
+            self.nu          = state.get("nu",           self.nu)
+            self.gamma       = state.get("gamma",        self.gamma)
+            self.window_size = state.get("window_size",  self.window_size)
+            self.more_scroll = state.get("more_scroll",  self.more_scroll)
+            self.dir_scroll  = state.get("dir_scroll",   self.dir_scroll)
+            self.mode        = state.get("mode",         MODE_EVALUATING)
+            self.eval_buffer = state.get("eval_buffer",  [])
+            self.eval_scores = state.get("eval_scores",  [])
             print(f"[Trainer] Loaded state: {self.n_sessions} sessions, "
-                  f"{len(self.buffer_39)} 39-feat windows, "
-                  f"{len(self.buffer_zheng)} Zheng windows")
+                  f"{len(self.buffer)} windows in buffer, mode={self.mode}")
         except FileNotFoundError:
             print("[Trainer] No saved state found — starting fresh")
             return
 
         try:
-            self.models_39 = joblib.load(os.path.join(path, "models_39.pkl"))
-            self.scaler_39 = joblib.load(os.path.join(path, "scaler_39.pkl"))
-            print("[Trainer] Loaded 39-feat model from disk")
+            self.model = joblib.load(os.path.join(path, "model.pkl"))
+            print("[Trainer] Loaded model from disk")
         except FileNotFoundError:
-            print("[Trainer] No 39-feat model found")
+            print("[Trainer] No model found — evaluation phase will be skipped "
+                  "until a model is available")
 
-        try:
-            self.models_zheng = joblib.load(os.path.join(path, "models_zheng.pkl"))
-            self.scaler_zheng = joblib.load(os.path.join(path, "scaler_zheng.pkl"))
-            print("[Trainer] Loaded Zheng model from disk")
-        except FileNotFoundError:
-            print("[Trainer] No Zheng model found")
-
-        try:
-            self.kpca_39 = joblib.load(os.path.join(path, "kpca_39.pkl"))
-        except FileNotFoundError:
-            self.kpca_39 = None
-
-        try:
-            self.kpca_zheng = joblib.load(os.path.join(path, "kpca_zheng.pkl"))
-        except FileNotFoundError:
-            self.kpca_zheng = None
-
-    # ── Properties ───────────────────────────────────────────────────────
+    # ── Properties ────────────────────────────────────────────────────────
 
     @property
     def is_ready(self):
-        """True if at least one model is trained and can score sessions."""
-        return self.models_39 is not None or self.models_zheng is not None
+        return self.model is not None
 
     @property
     def enrollment_status(self):
-        lines = [f"Sessions collected: {self.n_sessions}"]
-        lines.append(f"39-feat windows:   {len(self.buffer_39)} / {MIN_SESSIONS_39} needed")
-        lines.append(f"Zheng windows:     {len(self.buffer_zheng)} / {MIN_SESSIONS_ZHENG} needed")
-        lines.append(f"39-feat model:     {'ready' if self.models_39    else 'not yet trained'}")
-        lines.append(f"Zheng model:       {'ready' if self.models_zheng else 'not yet trained'}")
+        lines = [
+            f"Mode:               {self.mode}",
+            f"Sessions collected: {self.n_sessions}",
+        ]
+        if self.mode == MODE_EVALUATING:
+            remaining = max(0, EVAL_SESSIONS - self.n_sessions)
+            lines += [
+                f"Eval windows so far:{len(self.eval_scores)}",
+                f"Sessions until eval:{remaining}",
+            ]
+        else:
+            lines += [
+                f"Windows in buffer:  {len(self.buffer)} / {MIN_WINDOWS} needed",
+            ]
+        lines.append(f"Model:              {'ready' if self.model else 'not yet trained'}")
         return "\n".join(lines)
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
-        print("Usage: python continual_trainer.py <user_id> <session1.csv> [session2.csv ...]")
+        print("Usage: python continual_trainer_shen_scroll.py <user_id> <session1.csv> ...")
         sys.exit(1)
     user_id  = sys.argv[1]
     sessions = sys.argv[2:]
-    trainer  = ContinualTrainer(user_id=user_id)
+    trainer  = ContinualTrainerShenScroll(user_id=user_id)
     trainer.load()
     for s in sessions:
         trainer.update(s)

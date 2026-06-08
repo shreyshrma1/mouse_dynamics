@@ -1,0 +1,57 @@
+[meta]
+username=test4
+password=9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+order=acc_735459,acc_637444,acc_750797,acc_351946,acc_960291
+
+[accounts]
+id=acc_735459 | type=Checking | name=Main Checking | balance=525.00 | account_no=773788688682 | routing_no=021000021 | opened=Feb 02, 2026 | rate=N/A | limit=2500.00
+id=acc_637444 | type=Savings | name=Main Savings | balance=1775.00 | account_no=789666887465 | routing_no=021000021 | opened=Feb 12, 2025 | rate=2.35% APY | limit=2500.00
+id=acc_960291 | type=Savings | name=Emergency Fund | balance=300.00 | account_no=419147790839 | routing_no=021000021 | opened=Dec 07, 2024 | rate=2.35% APY | limit=2500.00
+id=acc_351946 | type=Savings | name=Travel Fund | balance=200.00 | account_no=669745085723 | routing_no=021000021 | opened=Feb 25, 2026 | rate=2.35% APY | limit=2500.00
+id=acc_750797 | type=Savings | name=Laptop Fund | balance=225.00 | account_no=043007882285 | routing_no=021000021 | opened=Dec 27, 2024 | rate=2.35% APY | limit=2500.00
+
+[transactions]
+id=txn_187015 | ts=1775317001 | from=external | to=acc_735459 | amount=2400.00 | note=Payroll deposit | status=completed | payee_acc_no=
+id=txn_196621 | ts=1775489801 | from=acc_735459 | to=external | amount=850.00 | note=Rent payment | status=completed | payee_acc_no=331552426002
+id=txn_231171 | ts=1775576201 | from=acc_735459 | to=external | amount=62.40 | note=Electric bill | status=completed | payee_acc_no=638429781356
+id=txn_925174 | ts=1775749001 | from=acc_735459 | to=acc_637444 | amount=200.00 | note=Savings transfer | status=completed | payee_acc_no=
+id=txn_024526 | ts=1775921801 | from=acc_735459 | to=external | amount=38.99 | note=Streaming subscriptions | status=completed | payee_acc_no=326268757606
+id=txn_189302 | ts=1776094601 | from=acc_735459 | to=external | amount=124.50 | note=Grocery run | status=completed | payee_acc_no=959026039732
+id=txn_439897 | ts=1776267401 | from=external | to=acc_735459 | amount=85.00 | note=Freelance payment | status=completed | payee_acc_no=
+id=txn_983718 | ts=1776440201 | from=acc_735459 | to=external | amount=9.99 | note=Cloud storage | status=completed | payee_acc_no=073967023700
+id=txn_884217 | ts=1776613001 | from=acc_735459 | to=external | amount=47.20 | note=Gas station | status=completed | payee_acc_no=738564332132
+id=txn_829850 | ts=1776872201 | from=external | to=acc_735459 | amount=2400.00 | note=Payroll deposit | status=completed
+id=txn_270733 | ts=1777045001 | from=acc_735459 | to=external | amount=850.00 | note=Rent payment | status=completed | payee_acc_no=331552426002
+id=txn_243370 | ts=1777131401 | from=acc_735459 | to=external | amount=62.40 | note=Electric bill | status=completed | payee_acc_no=638429781356
+id=txn_549117 | ts=1777304201 | from=acc_735459 | to=acc_637444 | amount=200.00 | note=Savings transfer | status=completed | payee_acc_no=
+id=txn_463391 | ts=1777477001 | from=acc_735459 | to=external | amount=210.00 | note=Car insurance | status=completed | payee_acc_no=044557657021
+id=txn_678245 | ts=1777649801 | from=acc_735459 | to=external | amount=89.30 | note=Pharmacy | status=completed | payee_acc_no=857905649172
+id=txn_029121 | ts=1777822601 | from=external | to=acc_637444 | amount=500.00 | note=Tax refund | status=completed | payee_acc_no=
+id=txn_038479 | ts=1777995401 | from=acc_735459 | to=external | amount=34.00 | note=Dinner out | status=completed | payee_acc_no=363132144905
+id=txn_928475 | ts=1778168201 | from=acc_735459 | to=external | amount=15.49 | note=Coffee shop | status=completed | payee_acc_no=261912918370
+id=txn_318518 | ts=1778341001 | from=acc_735459 | to=external | amount=9.99 | note=Music subscription | status=completed | payee_acc_no=505923363581
+id=txn_982039 | ts=1778600201 | from=external | to=acc_735459 | amount=2400.00 | note=Payroll deposit | status=completed
+id=txn_303887 | ts=1778773001 | from=acc_735459 | to=external | amount=850.00 | note=Rent payment | status=completed | payee_acc_no=331552426002
+id=txn_250974 | ts=1778859401 | from=acc_735459 | to=external | amount=62.40 | note=Electric bill | status=completed | payee_acc_no=638429781356
+id=txn_872310 | ts=1779032201 | from=acc_735459 | to=acc_637444 | amount=200.00 | note=Savings transfer | status=completed | payee_acc_no=
+id=txn_634155 | ts=1779205001 | from=acc_735459 | to=external | amount=143.20 | note=Grocery run | status=completed | payee_acc_no=959026039732
+id=txn_286549 | ts=1779377801 | from=acc_735459 | to=external | amount=55.00 | note=Internet bill | status=completed | payee_acc_no=854918096728
+id=txn_037247 | ts=1779550601 | from=external | to=acc_735459 | amount=120.00 | note=Freelance payment | status=completed | payee_acc_no=
+id=txn_108461 | ts=1779723401 | from=acc_735459 | to=external | amount=28.75 | note=Lunch | status=completed | payee_acc_no=759187372151
+id=txn_812142 | ts=1779896201 | from=acc_735459 | to=external | amount=9.99 | note=Cloud storage | status=completed | payee_acc_no=073967023700
+id=txn_904463 | ts=1780069001 | from=acc_735459 | to=external | amount=67.40 | note=Gas station | status=completed | payee_acc_no=738564332132
+id=txn_118132 | ts=1780155401 | from=external | to=acc_735459 | amount=2400.00 | note=Payroll deposit | status=completed
+id=txn_045262 | ts=1780241801 | from=acc_735459 | to=external | amount=850.00 | note=Rent payment | status=completed | payee_acc_no=331552426002
+id=txn_107102 | ts=1780328201 | from=acc_735459 | to=acc_637444 | amount=200.00 | note=Savings transfer | status=completed | payee_acc_no=
+id=txn_346137 | ts=1780414601 | from=acc_735459 | to=external | amount=44.60 | note=Grocery run | status=completed | payee_acc_no=959026039732
+id=txn_815511 | ts=1780501001 | from=external | to=acc_735459 | amount=18.50 | note=Refund | status=completed | payee_acc_no=
+id=txn_361319 | ts=1780501125 | from=acc_735459 | to=acc_351946 | amount=200.00 | note=Travel deposit | status=completed | payee_acc_no=
+id=txn_466504 | ts=1780501143 | from=acc_735459 | to=acc_960291 | amount=300.00 | note=Emergency Deposit | status=completed | payee_acc_no=
+id=txn_069856 | ts=1780501175 | from=external | to=acc_637444 | amount=225.00 | note=Roomate | status=completed
+id=txn_580902 | ts=1780501201 | from=acc_637444 | to=acc_750797 | amount=150.00 | note=Laptop deposit | status=completed | payee_acc_no=
+id=txn_089962 | ts=1780501222 | from=acc_735459 | to=acc_750797 | amount=75.00 | note=Laptop deposit | status=completed | payee_acc_no=
+id=txn_178340 | ts=1780501244 | from=external | to=acc_637444 | amount=600.00 | note=Freelance invoice | status=completed
+id=txn_219093 | ts=1780501264 | from=acc_637444 | to=acc_735459 | amount=400.00 | note=Checking deposit | status=completed | payee_acc_no=
+
+[payees]
+id=pay_700781 | name=Landlord | acc_id=acc_735459 | amount=850.00 | payee_acc_no=331552426002

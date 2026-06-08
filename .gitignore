@@ -1,3 +1,9 @@
 balabit_dataset/
 checkpoints_ocsvm/
 checkpoints_ocsvm_balabit/
+cdsvdd/
+checkpoints_cdsvdd_bank/
+checkpoints_cdsvdd_bank_raw/
+checkpoints_shen_scroll/
+checkpoints_shen_scroll_bank/
+checkponts_svdd_scroll_bank/

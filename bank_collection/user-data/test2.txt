@@ -1,0 +1,75 @@
+[meta]
+username=test2
+password=9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+order=acc_187707,acc_198424,acc_240074,acc_079140,acc_157529
+
+[accounts]
+id=acc_187707 | type=Checking | name=Main Checking | balance=1661.82
+id=acc_198424 | type=Savings | name=Main Savings | balance=1409.78
+id=acc_157529 | type=Savings | name=Emergency Fund | balance=500.00
+id=acc_240074 | type=Savings | name=Travel Fund | balance=350.00
+id=acc_079140 | type=Savings | name=Laptop Fund | balance=345.00
+
+[transactions]
+id=txn_114038 | ts=1774046252 | from=external | to=acc_187707 | amount=2400.00 | note=Payroll deposit | status=completed
+id=txn_221056 | ts=1774219052 | from=acc_187707 | to=external | amount=850.00 | note=Rent payment | status=completed
+id=txn_054913 | ts=1774305452 | from=acc_187707 | to=external | amount=62.40 | note=Electric bill | status=completed
+id=txn_543662 | ts=1774478252 | from=acc_187707 | to=acc_198424 | amount=200.00 | note=Savings transfer | status=completed
+id=txn_905415 | ts=1774651052 | from=acc_187707 | to=external | amount=38.99 | note=Streaming subscriptions | status=completed
+id=txn_944362 | ts=1774823852 | from=acc_187707 | to=external | amount=124.50 | note=Grocery run | status=completed
+id=txn_518097 | ts=1774996652 | from=external | to=acc_187707 | amount=85.00 | note=Freelance payment | status=completed
+id=txn_567268 | ts=1775169452 | from=acc_187707 | to=external | amount=9.99 | note=Cloud storage | status=completed
+id=txn_401091 | ts=1775342252 | from=acc_187707 | to=external | amount=47.20 | note=Gas station | status=completed
+id=txn_855449 | ts=1775601452 | from=external | to=acc_187707 | amount=2400.00 | note=Payroll deposit | status=completed
+id=txn_924364 | ts=1775774252 | from=acc_187707 | to=external | amount=850.00 | note=Rent payment | status=completed
+id=txn_093707 | ts=1775860652 | from=acc_187707 | to=external | amount=62.40 | note=Electric bill | status=completed
+id=txn_676667 | ts=1776033452 | from=acc_187707 | to=acc_198424 | amount=200.00 | note=Savings transfer | status=completed
+id=txn_741152 | ts=1776206252 | from=acc_187707 | to=external | amount=210.00 | note=Car insurance | status=completed
+id=txn_754609 | ts=1776379052 | from=acc_187707 | to=external | amount=89.30 | note=Pharmacy | status=completed
+id=txn_431976 | ts=1776551852 | from=external | to=acc_198424 | amount=500.00 | note=Tax refund | status=completed
+id=txn_556524 | ts=1776724652 | from=acc_187707 | to=external | amount=34.00 | note=Dinner out | status=completed
+id=txn_125888 | ts=1776897452 | from=acc_187707 | to=external | amount=15.49 | note=Coffee shop | status=completed
+id=txn_694515 | ts=1777070252 | from=acc_187707 | to=external | amount=9.99 | note=Music subscription | status=completed
+id=txn_493607 | ts=1777329452 | from=external | to=acc_187707 | amount=2400.00 | note=Payroll deposit | status=completed
+id=txn_068858 | ts=1777502252 | from=acc_187707 | to=external | amount=850.00 | note=Rent payment | status=completed
+id=txn_064866 | ts=1777588652 | from=acc_187707 | to=external | amount=62.40 | note=Electric bill | status=completed
+id=txn_121042 | ts=1777761452 | from=acc_187707 | to=acc_198424 | amount=200.00 | note=Savings transfer | status=completed
+id=txn_506961 | ts=1777934252 | from=acc_187707 | to=external | amount=143.20 | note=Grocery run | status=completed
+id=txn_015341 | ts=1778107052 | from=acc_187707 | to=external | amount=55.00 | note=Internet bill | status=completed
+id=txn_162202 | ts=1778279852 | from=external | to=acc_187707 | amount=120.00 | note=Freelance payment | status=completed
+id=txn_512098 | ts=1778452652 | from=acc_187707 | to=external | amount=28.75 | note=Lunch | status=completed
+id=txn_613332 | ts=1778625452 | from=acc_187707 | to=external | amount=9.99 | note=Cloud storage | status=completed
+id=txn_699720 | ts=1778798252 | from=acc_187707 | to=external | amount=67.40 | note=Gas station | status=completed
+id=txn_604227 | ts=1778884652 | from=external | to=acc_187707 | amount=2400.00 | note=Payroll deposit | status=completed
+id=txn_283265 | ts=1778971052 | from=acc_187707 | to=external | amount=850.00 | note=Rent payment | status=completed
+id=txn_177972 | ts=1779057452 | from=acc_187707 | to=acc_198424 | amount=200.00 | note=Savings transfer | status=completed
+id=txn_905673 | ts=1779143852 | from=acc_187707 | to=external | amount=44.60 | note=Grocery run | status=completed
+id=txn_587739 | ts=1779230252 | from=external | to=acc_187707 | amount=18.50 | note=Refund | status=completed
+id=txn_761691 | ts=1779230368 | from=acc_198424 | to=acc_157529 | amount=300.00 | note=Emergency deposit | status=completed
+id=txn_306084 | ts=1779230382 | from=acc_198424 | to=acc_240074 | amount=200.00 | note=Travel deposit | status=completed
+id=txn_504164 | ts=1779230412 | from=external | to=acc_198424 | amount=225.00 | note=Roomate | status=completed
+id=txn_955336 | ts=1779230431 | from=acc_198424 | to=acc_079140 | amount=150.00 | note=Laptop deposit | status=completed
+id=txn_748016 | ts=1779230447 | from=acc_187707 | to=acc_079140 | amount=75.00 | note=Laptop deposit | status=completed
+id=txn_000944 | ts=1779230461 | from=external | to=acc_198424 | amount=600.00 | note=Freelance invoice | status=completed
+id=txn_908782 | ts=1779230485 | from=acc_198424 | to=acc_187707 | amount=400.00 | note=Checking deposit | status=completed
+id=txn_292758 | ts=1779230591 | from=external | to=acc_187707 | amount=2400.00 | note=Paycheck | status=completed
+id=txn_324606 | ts=1779230609 | from=acc_187707 | to=acc_198424 | amount=300.00 | note=Savings deposit | status=completed
+id=txn_676014 | ts=1779230622 | from=acc_187707 | to=acc_240074 | amount=150.00 | note=Travel deposit | status=completed
+id=txn_602957 | ts=1779230644 | from=acc_187707 | to=acc_157529 | amount=200.00 | note=Emergency deposit | status=completed
+id=txn_308489 | ts=1779230663 | from=acc_187707 | to=external | amount=200.00 | note=Credit card | status=completed
+id=txn_038727 | ts=1779230699 | from=acc_198424 | to=acc_187707 | amount=200.00 | note=Checking deposit | status=completed
+id=txn_432984 | ts=1779230712 | from=external | to=acc_198424 | amount=180.00 | note=Deposit | status=completed
+id=txn_082500 | ts=1779230735 | from=acc_198424 | to=acc_079140 | amount=120.00 | note=Laptop deposit | status=completed
+id=txn_541681 | ts=1779230748 | from=external | to=acc_198424 | amount=50.00 | note=gift | status=completed
+id=txn_932063 | ts=1779230761 | from=acc_198424 | to=acc_187707 | amount=50.00 | note=Spending | status=completed
+id=txn_636733 | ts=1779231091 | from=acc_187707 | to=external | amount=850.00 | note=Rent | status=completed
+id=txn_766059 | ts=1779231105 | from=acc_187707 | to=external | amount=62.40 | note=Electric bill | status=completed
+id=txn_455846 | ts=1779231117 | from=acc_187707 | to=external | amount=55.00 | note=Internet | status=completed
+id=txn_339436 | ts=1779231136 | from=acc_187707 | to=external | amount=38.99 | note=Streaming subscription | status=completed
+id=txn_725566 | ts=1779231150 | from=acc_187707 | to=external | amount=9.99 | note=Music subscription | status=completed
+id=txn_819760 | ts=1779231164 | from=acc_198424 | to=acc_187707 | amount=200.00 | note=Checking deposit | status=completed
+id=txn_426741 | ts=1779231187 | from=acc_157529 | to=acc_187707 | amount=200.00 | note=Emergency | status=completed
+id=txn_615885 | ts=1779231197 | from=acc_187707 | to=external | amount=200.00 | note=Hospital | status=completed
+id=txn_637922 | ts=1779231213 | from=external | to=acc_198424 | amount=400.00 | note=Family | status=completed
+id=txn_914011 | ts=1779231237 | from=acc_198424 | to=acc_157529 | amount=200.00 | note=Emergency deposit | status=completed
+id=txn_945953 | ts=1779231248 | from=acc_198424 | to=acc_187707 | amount=100.00 | note=Buffer | status=completed

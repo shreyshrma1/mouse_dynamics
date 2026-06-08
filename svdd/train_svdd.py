@@ -1,0 +1,165 @@
+"""
+train_from_existing_svdd_scroll.py
+
+Trains Classic SVDD on a user's collected data without the Shen
+distance-vector preprocessing. Adds StandardScaler normalization before
+feeding feature vectors into ClassicSVDD.
+
+Saves to checkpoints_svdd_scroll_bank/<user_id>/:
+    model.pkl  - trained ClassicSVDD
+    state.pkl  - scaler, held-out windows, and metadata
+
+Usage:
+    python data_collection/train_from_existing_svdd_scroll.py
+    python data_collection/train_from_existing_svdd_scroll.py --more_scroll
+    python data_collection/train_from_existing_svdd_scroll.py --C=0.05
+"""
+
+import sys
+import os
+import joblib
+import numpy as np
+
+DATA_DIR      = "bank_collection/bank-data"
+SAVE_DIR      = "checkpoints_svdd_scroll_bank"
+WINDOW_SIZE   = 5
+C             = 0.1
+GAMMA         = "scale"
+HELD_OUT_FRAC = 0.25
+
+HOLISTIC_COLS = [
+    "type_of_action","traveled_distance_pixel","elapsed_time",
+    "direction_of_movement","straightness","num_points","sum_of_angles",
+    "mean_curv","sd_curv","max_curv","min_curv",
+    "mean_omega","sd_omega","max_omega","min_omega",
+    "largest_deviation","dist_end_to_end_line","num_critical_points",
+    "mean_vx","sd_vx","max_vx","min_vx",
+    "mean_vy","sd_vy","max_vy","min_vy",
+    "mean_v","sd_v","max_v","min_v",
+    "mean_a","sd_a","max_a","min_a",
+    "mean_jerk","sd_jerk","max_jerk","min_jerk","a_beg_time"
+]
+
+SCROLL_COLS = [
+    "scroll_count",
+    "scroll_rate",
+    "scroll_ratio",
+    "scroll_up_ratio",
+    "scroll_dur_mean",
+    "scroll_dur_std",
+    "scroll_burst_count",
+    "scroll_burst_dur_mean",
+    "scroll_burst_len_mean",
+]
+
+
+def get_session_files(user_dir):
+    return sorted([
+        os.path.join(user_dir, f)
+        for f in os.listdir(user_dir)
+        if os.path.isfile(os.path.join(user_dir, f))
+    ])
+
+
+def extract_all_windows(session_files, user_id, more_scroll, dir_scroll,
+                         extract_session_features, MORE_SCROLL_COLS, DIR_SCROLL_COLS):
+    feature_cols = (HOLISTIC_COLS + SCROLL_COLS
+                    + (MORE_SCROLL_COLS if more_scroll else [])
+                    + (DIR_SCROLL_COLS  if dir_scroll  else []))
+    all_vecs = []
+    for path in session_files:
+        print(f"  Processing {os.path.basename(path)}...")
+        try:
+            df = extract_session_features(path, user_id, window_size=WINDOW_SIZE,
+                                          more_scroll=more_scroll, dir_scroll=dir_scroll)
+            df = df.replace([np.inf, -np.inf], np.nan).dropna(subset=feature_cols)
+            if len(df) == 0:
+                continue
+            for _, grp in df.groupby("session"):
+                rows = grp[feature_cols].values
+                if len(rows) >= 1:
+                    all_vecs.append(rows.mean(axis=0))
+        except Exception as e:
+            print(f"  [!] {os.path.basename(path)}: {e}")
+    return all_vecs
+
+
+def main():
+    user_id     = input("Enter user ID: ").strip()
+    more_scroll = "--more_scroll" in sys.argv
+    dir_scroll  = "--dir_scroll"  in sys.argv
+
+    c_val = C
+    for arg in sys.argv:
+        if arg.startswith("--C="):
+            c_val = float(arg.split("=")[1])
+
+    # ── Lazy imports ───────────────────────────────────────────────────────
+    print("Loading libraries...")
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from measurements.extract_features_cap import (
+        extract_session_features, MORE_SCROLL_COLS, DIR_SCROLL_COLS
+    )
+    from sklearn.preprocessing import StandardScaler
+    from svdd.classic_svdd import ClassicSVDD
+    print("Ready.")
+
+    feature_cols = (HOLISTIC_COLS + SCROLL_COLS
+                    + (MORE_SCROLL_COLS if more_scroll else [])
+                    + (DIR_SCROLL_COLS  if dir_scroll  else []))
+
+    user_dir = os.path.join(DATA_DIR, user_id)
+    if not os.path.isdir(user_dir):
+        print(f"No data directory found at {user_dir}")
+        sys.exit(1)
+
+    session_files = get_session_files(user_dir)
+    print(f"Found {len(session_files)} session files for {user_id}")
+
+    all_vecs = extract_all_windows(session_files, user_id, more_scroll, dir_scroll,
+                                   extract_session_features, MORE_SCROLL_COLS, DIR_SCROLL_COLS)
+    if len(all_vecs) < 8:
+        print(f"Not enough windows ({len(all_vecs)}) to train — collect more data")
+        sys.exit(1)
+
+    n_total = len(all_vecs)
+    n_test  = max(1, int(n_total * HELD_OUT_FRAC))
+    n_train = n_total - n_test
+
+    train_samples = np.array(all_vecs[:n_train])
+    test_samples  = np.array(all_vecs[n_train:])
+
+    print(f"Total windows: {n_total}  |  Train: {n_train}  |  Held-out: {n_test}")
+    print(f"Feature vector: {len(feature_cols)} total")
+    print(f"Fitting ClassicSVDD (C={c_val}, gamma={GAMMA}) with standardization...")
+
+    scaler = StandardScaler()
+    train_scaled = scaler.fit_transform(train_samples)
+
+    model = ClassicSVDD(C=c_val, gamma=GAMMA)
+    model.fit(train_scaled)
+
+    train_scores = model.decision_function(train_scaled)
+    print(f"Train scores: min={train_scores.min():.4f}, "
+          f"mean={train_scores.mean():.4f}, max={train_scores.max():.4f}")
+
+    save_path = os.path.join(SAVE_DIR, user_id)
+    os.makedirs(save_path, exist_ok=True)
+    joblib.dump(model, os.path.join(save_path, "model.pkl"))
+    joblib.dump({
+        "scaler":       scaler,
+        "test_samples": test_samples,
+        "n_train":      n_train,
+        "n_test":       n_test,
+        "C":            c_val,
+        "gamma":        GAMMA,
+        "window_size":  WINDOW_SIZE,
+        "more_scroll":  more_scroll,
+        "dir_scroll":   dir_scroll,
+    }, os.path.join(save_path, "state.pkl"))
+
+    print(f"Model saved to {save_path}/")
+
+
+if __name__ == "__main__":
+    main()

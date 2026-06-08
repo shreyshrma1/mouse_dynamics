@@ -1,0 +1,4 @@
+user1 | username=test | sessions=8
+user2 | username=test2 | sessions=7
+user3 | username=test3 | sessions=11
+user4 | username=test4 | sessions=1

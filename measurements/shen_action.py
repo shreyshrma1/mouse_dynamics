@@ -1,31 +1,24 @@
 """
-shen_procedural.py
+shen_action.py
 
-Extends the Shen et al. (2013) distance-vector + OneClassSVM idea with
-procedural features for general/free-form mouse data.
+Extends the Shen et al. (2013) pipeline with procedural features.
 
-Distance vector layout:
-  - Holistic: action-type-aware Manhattan distance.
-      The window-level holistic vector is:
-        [MM_mean_features, PC_mean_features, DD_mean_features,
-         prop_MM, prop_PC, prop_DD]
-      where mean_features excludes type_of_action because action type is a
-      categorical label, not a numeric quantity that should be averaged.
+Compact distance vector (48-dim total):
+  - Holistic/action-composition (42-dim): Manhattan distance between
+    [39-dim global averaged holistic vector, prop_MM, prop_PC, prop_DD]
+  - Procedural (6-dim): for each action type (MM, PC, DD) and each curve
+    type (speed, accel), compute the mean DTW distance between all curves
+    of that type in the new window and all curves of that type in the
+    reference window.
 
-  - Procedural: for each action type (MM, PC, DD) and each curve type
-    (speed, accel), compute the mean DTW distance between all curves of that
-    type in the new window and all curves of that type in the reference window.
-
-With the current feature list:
-  - 38 non-type holistic features x 3 action types = 114
-  - 3 action-type proportion features = 3
-  - 6 procedural DTW features = 6
-  - Total distance vector dimension = 123
+This version intentionally DOES NOT use the 117-dim per-action-type holistic
+split. It keeps the older global 39-dim holistic average and adds only three
+extra action-composition features.
 
 Usage:
-    python measurements/shen_procedural.py
-    python measurements/shen_procedural.py --nu 0.06 --window_size 50
-    python measurements/shen_procedural.py --max_impostor_windows 30
+    python measurements/shen_action.py
+    python measurements/shen_action.py --nu 0.06 --window_size 50
+    python measurements/shen_action.py --max_impostor_windows 30
 """
 
 import sys
@@ -53,8 +46,8 @@ ACTION_NAMES = {ACTION_MM: "MM", ACTION_PC: "PC", ACTION_DD: "DD"}
 
 DATA_DIR = "balabit_dataset/training_files"
 HELD_OUT_FRAC = 0.25
-PROCEDURAL_DIM = len(ACTION_TYPES) * 2
-DISTANCE_DIM = HOLISTIC_DIM + PROCEDURAL_DIM
+PROCEDURAL_DIM = len(ACTION_TYPES) * 2  # speed + accel per action type
+DISTANCE_DIM = HOLISTIC_DIM + PROCEDURAL_DIM  # 42 + 6 = 48
 
 
 def parse_args():
@@ -80,27 +73,29 @@ def dtw_distance(a, b):
     n, m = len(a), len(b)
     cost = np.full((n, m), np.inf)
     cost[0, 0] = abs(a[0] - b[0])
+
     for i in range(1, n):
         cost[i, 0] = cost[i - 1, 0] + abs(a[i] - b[0])
+
     for j in range(1, m):
         cost[0, j] = cost[0, j - 1] + abs(a[0] - b[j])
+
     for i in range(1, n):
         for j in range(1, m):
             cost[i, j] = abs(a[i] - b[j]) + min(
-                cost[i - 1, j], cost[i, j - 1], cost[i - 1, j - 1]
+                cost[i - 1, j],
+                cost[i, j - 1],
+                cost[i - 1, j - 1],
             )
+
     return cost[-1, -1]
 
 
 def mean_dtw(new_curves, ref_curves, curve_idx):
     """
-    Mean DTW distance between all curves of a given index:
-      - curve_idx=0 means speed
-      - curve_idx=1 means acceleration
-
-    Returns 0.0 if either list is empty. This preserves the behavior of the
-    previous script. A future improvement would be to add missingness flags or
-    use a learned missing-comparison penalty.
+    Mean DTW distance between all curves of a given index (0=speed, 1=accel)
+    in new_curves vs all curves of the same index in ref_curves.
+    Returns 0.0 if either list is empty.
     """
     if not new_curves or not ref_curves:
         return 0.0
@@ -109,13 +104,14 @@ def mean_dtw(new_curves, ref_curves, curve_idx):
     for nc in new_curves:
         for rc in ref_curves:
             dists.append(dtw_distance(nc[curve_idx], rc[curve_idx]))
+
     return float(np.mean(dists))
 
 
 def compute_distance_vector(window, ref_window):
     """
-    Action-type-aware holistic Manhattan distance + procedural DTW distances.
-    Total dimension is DISTANCE_DIM.
+    42-dim holistic/action-composition Manhattan distance +
+    6-dim procedural distance = 48 dimensions total.
     """
     holistic_dist = np.abs(window["holistic_vec"] - ref_window["holistic_vec"])
 
@@ -130,8 +126,7 @@ def compute_distance_vector(window, ref_window):
 
     if dist_vec.shape[0] != DISTANCE_DIM:
         raise ValueError(
-            f"Expected distance vector dim {DISTANCE_DIM}, "
-            f"got {dist_vec.shape[0]}"
+            f"Expected distance dim {DISTANCE_DIM}, got {dist_vec.shape[0]}"
         )
 
     return dist_vec
@@ -144,9 +139,12 @@ def compute_all_distance_vectors(windows, ref_window):
 def find_reference_idx(holistic_vecs):
     n = len(holistic_vecs)
     mean_dists = np.zeros(n)
+
     for i in range(n):
         dists = np.sum(np.abs(holistic_vecs - holistic_vecs[i]), axis=1)
+        # Exclude self-distance when possible.
         mean_dists[i] = dists.sum() / max(n - 1, 1)
+
     return int(np.argmin(mean_dists))
 
 
@@ -158,6 +156,7 @@ def normalize(dist_vecs, mean, std):
 def sample_windows(windows, max_count):
     if len(windows) <= max_count:
         return windows
+
     indices = np.linspace(0, len(windows) - 1, max_count, dtype=int)
     return [windows[i] for i in indices]
 
@@ -186,12 +185,14 @@ def main():
     # Precompute all windows once.
     print("Precomputing windows for all users...")
     all_user_windows = {}
+
     for user in BALABIT_USERS:
         user_dir = os.path.join(DATA_DIR, user)
         all_files = get_session_files(user_dir)
         wins = extract_procedural_windows(all_files, user, args.window_size)
         all_user_windows[user] = wins
         print(f"  {user:<12} {len(wins)} windows")
+
     print()
 
     all_results = []
@@ -220,11 +221,11 @@ def main():
         ref_idx = find_reference_idx(holistic_vecs)
         ref_window = train_wins[ref_idx]
 
-        # Show action type breakdown in reference.
         ref_counts = {
             ACTION_NAMES[t]: len(ref_window["curves_by_type"].get(t, []))
             for t in ACTION_TYPES
         }
+
         print(f"  Reference: window {ref_idx}, "
               f"MM={ref_counts['MM']} PC={ref_counts['PC']} "
               f"DD={ref_counts['DD']} actions, "
@@ -250,6 +251,7 @@ def main():
 
         legit_accepted = int(np.sum(legit_scores >= 0))
         legit_scored = len(legit_scores)
+
         print(f"\n  Legitimate held-out ({legit_scored} windows):")
         print(f"    Scores: min={legit_scores.min():+.4f}, "
               f"mean={legit_scores.mean():+.4f}, max={legit_scores.max():+.4f}")
@@ -260,12 +262,16 @@ def main():
         all_impostor_scores = []
 
         print(f"\n  Scoring impostors (max {args.max_impostor_windows} windows/user)...")
+
         for other_user in BALABIT_USERS:
             if other_user == user:
                 continue
+
             other_wins = sample_windows(
-                all_user_windows[other_user], args.max_impostor_windows
+                all_user_windows[other_user],
+                args.max_impostor_windows,
             )
+
             if not other_wins:
                 continue
 
@@ -276,7 +282,9 @@ def main():
             impostor_scored += len(imp_scores)
             impostor_accepted += int(np.sum(imp_scores >= 0))
             all_impostor_scores.extend(imp_scores.tolist())
-            print(f"    {other_user:<12} {int(np.sum(imp_scores < 0))}/{len(imp_scores)} rejected")
+
+            print(f"    {other_user:<12} "
+                  f"{int(np.sum(imp_scores < 0))}/{len(imp_scores)} rejected")
 
         impostor_rejected = impostor_scored - impostor_accepted
 
@@ -285,13 +293,21 @@ def main():
             np.ones(len(legit_scores)),
             np.zeros(len(all_impostor_scores)),
         ])
-        auc = roc_auc_score(all_labels, all_scores) \
-              if len(np.unique(all_labels)) == 2 else float("nan")
+
+        auc = (
+            roc_auc_score(all_labels, all_scores)
+            if len(np.unique(all_labels)) == 2
+            else float("nan")
+        )
 
         frr = 1 - legit_accepted / legit_scored if legit_scored > 0 else 0.0
         far = impostor_accepted / impostor_scored if impostor_scored > 0 else 0.0
-        acc = (legit_accepted + impostor_rejected) / (legit_scored + impostor_scored) \
-              if (legit_scored + impostor_scored) > 0 else 0.0
+        acc = (
+            (legit_accepted + impostor_rejected) /
+            (legit_scored + impostor_scored)
+            if (legit_scored + impostor_scored) > 0
+            else 0.0
+        )
 
         print(f"\n  Impostors:  {impostor_rejected}/{impostor_scored} rejected")
         print(f"  FAR: {far * 100:.1f}%  FRR: {frr * 100:.1f}%  "
@@ -318,6 +334,7 @@ def main():
     mean_far = sum(r["far"] for r in all_results) / len(all_results)
     mean_frr = sum(r["frr"] for r in all_results) / len(all_results)
     mean_acc = sum(r["acc"] for r in all_results) / len(all_results)
+
     valid_aucs = [r["auc"] for r in all_results if not np.isnan(r["auc"])]
     mean_auc = sum(valid_aucs) / len(valid_aucs) if valid_aucs else float("nan")
 
@@ -328,8 +345,12 @@ def main():
 
     micro_all_scores = np.concatenate([r["all_scores"] for r in all_results])
     micro_all_labels = np.concatenate([r["all_labels"] for r in all_results])
-    micro_auc = roc_auc_score(micro_all_labels, micro_all_scores) \
-                if len(np.unique(micro_all_labels)) == 2 else float("nan")
+
+    micro_auc = (
+        roc_auc_score(micro_all_labels, micro_all_scores)
+        if len(np.unique(micro_all_labels)) == 2
+        else float("nan")
+    )
 
     micro_frr = 1 - tla / tls if tls > 0 else 0.0
     micro_far = (tis - tir) / tis if tis > 0 else 0.0
@@ -340,15 +361,24 @@ def main():
     print(f"{'=' * 62}")
     print(f"  {'User':<12} {'FAR':>8} {'FRR':>8} {'Accuracy':>10} {'AUC':>8}")
     print(f"  {'-' * 50}")
+
     for r in all_results:
         print(f"  {r['user']:<12} {r['far'] * 100:>7.1f}% "
-              f"{r['frr'] * 100:>7.1f}% {r['acc'] * 100:>9.1f}% "
+              f"{r['frr'] * 100:>7.1f}% "
+              f"{r['acc'] * 100:>9.1f}% "
               f"{r['auc']:>8.4f}")
+
     print(f"  {'-' * 50}")
     print(f"  {'Mean':<12} {mean_far * 100:>7.1f}% "
-          f"{mean_frr * 100:>7.1f}% {mean_acc * 100:>9.1f}% {mean_auc:>8.4f}")
+          f"{mean_frr * 100:>7.1f}% "
+          f"{mean_acc * 100:>9.1f}% "
+          f"{mean_auc:>8.4f}")
+
     print(f"  {'Micro':<12} {micro_far * 100:>7.1f}% "
-          f"{micro_frr * 100:>7.1f}% {micro_acc * 100:>9.1f}% {micro_auc:>8.4f}")
+          f"{micro_frr * 100:>7.1f}% "
+          f"{micro_acc * 100:>9.1f}% "
+          f"{micro_auc:>8.4f}")
+
     print(f"\n  Total legitimate: {tla}/{tls} accepted")
     print(f"  Total impostors:  {tir}/{tis} rejected")
     print(f"{'=' * 62}")

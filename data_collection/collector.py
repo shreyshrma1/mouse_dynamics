@@ -55,7 +55,7 @@ class MouseCollector:
         t = self.elapsed()
         direction = 'Down' if dy < 0 else 'Up'
         with self.lock:
-            self.events.append([t, t, 'NoButton', f'Scroll {direction}', 0, 0])
+            self.events.append([t, t, 'Scroll', direction, 0, 0])
     
     def start(self, trainer=None):
         self.running = True
@@ -68,7 +68,8 @@ class MouseCollector:
         print(f"[Collector] Listening for user {self.user_id}... (Ctrl+C to stop)")
         with mouse.Listener(
             on_move=self.on_move,
-            on_click=self.on_click
+            on_click=self.on_click,
+            on_scroll=self.on_scroll
         ) as listener:
             try:
                 listener.join()
