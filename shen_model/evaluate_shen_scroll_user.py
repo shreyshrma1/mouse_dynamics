@@ -22,7 +22,7 @@ import numpy as np
 from sklearn.metrics import roc_auc_score
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from measurements.extract_features_scroll import extract_session_features, MORE_SCROLL_COLS, DIR_SCROLL_COLS
+from measurements.extract_features_scroll import extract_session_features
 
 DEFAULT_SAVE_DIR     = "checkpoints_shen_scroll_bank"
 DEFAULT_IMPOSTOR_DIR = "bank_collection/bank-data"
@@ -50,13 +50,12 @@ def get_session_files(directory):
     ])
 
 
-def extract_windows(session_files, user_id, window_size, feature_cols,
-                    more_scroll=False, dir_scroll=False):
+def extract_windows(session_files, user_id, window_size, feature_cols):
     all_vecs = []
     for path in session_files:
         try:
             df = extract_session_features(path, user_id, window_size=window_size,
-                                          more_scroll=more_scroll, dir_scroll=dir_scroll)
+                                          more_scroll=True, dir_scroll=True)
             if df.empty or not all(c in df.columns for c in feature_cols):
                 continue
             df = df.replace([np.inf, -np.inf], np.nan).dropna(subset=feature_cols)
@@ -118,8 +117,6 @@ def main():
     test_samples    = state["test_samples"]
     window_size     = state["window_size"]
     feature_cols    = state["feature_cols"]
-    more_scroll     = state.get("more_scroll", False)
-    dir_scroll      = state.get("dir_scroll",  False)
     top_n           = state.get("top_n", None)
     saved_threshold = state.get("eer_threshold", None)
 
@@ -154,7 +151,7 @@ def main():
     # ── Impostor ──────────────────────────────────────────────────────────
     imp_dir    = os.path.join(args.impostor_dir, imp_user)
     imp_vecs   = extract_windows(get_session_files(imp_dir), imp_user,
-                                 window_size, feature_cols, more_scroll, dir_scroll)
+                                 window_size, feature_cols)
     imp_scores = score_vecs(imp_vecs, model, scaler, reference, dist_mean, dist_std)
 
     if len(imp_scores) == 0:

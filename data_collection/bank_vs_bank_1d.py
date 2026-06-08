@@ -7,14 +7,9 @@ Evaluates how well a user's model distinguishes between themselves
 and one other user from the same banking application — in one direction only:
   - User A's model scores blocks from user A (legitimate) and user B (impostor)
 
-Supports two detectors via --model flag:
-  ocsvm   : OneClassSVM (default) — loaded from checkpoints_shen_scroll_bank/
-  nn      : Nearest Neighbor (Manhattan) — loaded from checkpoints_nn_manhat_bank/
-
 Usage:
     python data_collection/bank_to_bank_1d.py
     python data_collection/bank_to_bank_1d.py --runs 50
-    python data_collection/bank_to_bank_1d.py --runs 50 --model nn
     python data_collection/bank_to_bank_1d.py --runs 50 --fixed
 """
 
@@ -35,67 +30,41 @@ N_IMPOSTOR   = N_SETS // 2
 THRESHOLDS   = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 DEFAULT_SEED = 42
 
-CHECKPOINT_DIRS = {
-    "ocsvm": "checkpoints_shen_scroll_bank",
-    "nn":    "checkpoints_nn_manhat_bank",
-}
-BANK_DATA_DIR = "bank_collection/bank-data"
+CHECKPOINT_DIR = "checkpoints_shen_scroll_bank"
+BANK_DATA_DIR  = "bank_collection/bank-data"
 WINDOW_SIZE   = 5
 
 
 # ── Model loading ─────────────────────────────────────────────────────────────
 
-def load_model(user_id, model_type):
-    checkpoint_dir = CHECKPOINT_DIRS[model_type]
-    path = os.path.join(checkpoint_dir, user_id)
+def load_model(user_id):
+    path = os.path.join(CHECKPOINT_DIR, user_id)
     try:
         state = joblib.load(os.path.join(path, "state.pkl"))
     except FileNotFoundError:
-        script = ("train_from_existing_shen_scroll.py" if model_type == "ocsvm"
-                  else "train_nn_manhat.py")
-        print(f"[Error] No model found at {path} — run {script} first.")
+        print(f"[Error] No model found at {path} — run shen_model/train_from_existing_shen_scroll.py first.")
         sys.exit(1)
-
-    if model_type == "ocsvm":
-        try:
-            model = joblib.load(os.path.join(path, "model.pkl"))
-        except FileNotFoundError:
-            print(f"[Error] model.pkl not found at {path}.")
-            sys.exit(1)
-        print(f"[Model] OCSVM loaded for '{user_id}' — "
-              f"train={state['n_train']} windows, held-out={state['n_test']} windows, "
-              f"features={len(state['feature_cols'])}, nu={state['nu']}, gamma={state['gamma']}")
-        return {
-            "type":         "ocsvm",
-            "model":        model,
-            "scaler":       state["scaler"],
-            "reference":    state["reference"],
-            "dist_mean":    state["dist_mean"],
-            "dist_std":     state["dist_std"],
-            "feature_cols": state["feature_cols"],
-            "more_scroll":  state.get("more_scroll", False),
-            "dir_scroll":   state.get("dir_scroll",  False),
-            "test_samples": state["test_samples"],
-            "eer_threshold": state.get("eer_threshold", None),
-        }
-    else:  # nn
-        print(f"[Model] NN Manhattan loaded for '{user_id}' — "
-              f"train={state['n_train']} windows, held-out={state['n_test']} windows, "
-              f"features={len(state['feature_cols'])}, k={state.get('k', 3)}")
-        return {
-            "type":         "nn",
-            "train_norm":   state["train_norm"],
-            "k":            state.get("k", 3),
-            "scaler":       state["scaler"],
-            "reference":    state["reference"],
-            "dist_mean":    state["dist_mean"],
-            "dist_std":     state["dist_std"],
-            "feature_cols": state["feature_cols"],
-            "more_scroll":  state.get("more_scroll", False),
-            "dir_scroll":   state.get("dir_scroll",  False),
-            "test_samples": state["test_samples"],
-            "eer_threshold": state.get("eer_threshold", None),
-        }
+    try:
+        model = joblib.load(os.path.join(path, "model.pkl"))
+    except FileNotFoundError:
+        print(f"[Error] model.pkl not found at {path}.")
+        sys.exit(1)
+    print(f"[Model] OCSVM loaded for '{user_id}' — "
+          f"train={state['n_train']} windows, held-out={state['n_test']} windows, "
+          f"features={len(state['feature_cols'])}, nu={state['nu']}, gamma={state['gamma']}")
+    return {
+        "type":          "ocsvm",
+        "model":         model,
+        "scaler":        state["scaler"],
+        "reference":     state["reference"],
+        "dist_mean":     state["dist_mean"],
+        "dist_std":      state["dist_std"],
+        "feature_cols":  state["feature_cols"],
+        "more_scroll":   state.get("more_scroll", False),
+        "dir_scroll":    state.get("dir_scroll",  False),
+        "test_samples":  state["test_samples"],
+        "eer_threshold": state.get("eer_threshold", None),
+    }
 
 
 # ── Data extraction ───────────────────────────────────────────────────────────
@@ -140,35 +109,14 @@ def preprocess(windows, m):
     return x
 
 
-def nn_manhattan_score(test_vecs, train_vecs, k):
-    test_vecs = np.atleast_2d(test_vecs)
-    scores    = np.zeros(len(test_vecs))
-    for i, test_vec in enumerate(test_vecs):
-        dists     = np.sum(np.abs(train_vecs - test_vec), axis=1)
-        scores[i] = np.sort(dists)[:k].mean()
-    return -scores
-
-
 def score_windows(windows, m):
     """Score windows against the model, returning raw scores."""
     x_norm = preprocess(windows, m)
-    if m["type"] == "ocsvm":
-        return m["model"].decision_function(x_norm)
-    else:
-        return nn_manhattan_score(x_norm, m["train_norm"], m["k"])
+    return m["model"].decision_function(x_norm)
 
 
 def get_threshold(m):
-    """Return the accept/reject threshold for the model."""
-    if m["type"] == "ocsvm":
-        return 0.0  # OCSVM uses fixed threshold of 0
-    else:
-        t = m.get("eer_threshold")
-        if t is None:
-            print("[Warning] No EER threshold saved for NN model — defaulting to 0. "
-                  "Run eval_nn_manhat.py first for a proper threshold.")
-            return 0.0
-        return t
+    return 0.0  # OCSVM uses a fixed decision boundary of 0
 
 
 # ── Set generation ────────────────────────────────────────────────────────────
@@ -295,7 +243,7 @@ def evaluate(target_user, target_model, impostor_user, impostor_windows,
 
 # ── Reporting ─────────────────────────────────────────────────────────────────
 
-def print_results(all_run_results, runs, user_a, user_b, model_type):
+def print_results(all_run_results, runs, user_a, user_b):
     sample_fars, sample_frrs = [], []
     thresh_fars = {t: [] for t in THRESHOLDS}
     thresh_frrs = {t: [] for t in THRESHOLDS}
@@ -310,7 +258,7 @@ def print_results(all_run_results, runs, user_a, user_b, model_type):
             thresh_frrs[t].append(frr)
 
     print(f"\n{'═' * 60}")
-    print(f"  Model={user_a} ({model_type.upper()})  Legitimate={user_a}  Impostor={user_b}")
+    print(f"  Model={user_a} (OCSVM)  Legitimate={user_a}  Impostor={user_b}")
     print(f"  {runs} run(s), {N_SETS} sets per run, {SET_SIZE} windows per set")
     print(f"{'═' * 60}")
 
@@ -337,8 +285,6 @@ def print_results(all_run_results, runs, user_a, user_b, model_type):
 
 def main():
     parser = argparse.ArgumentParser(description="Single-direction bank-vs-bank evaluation")
-    parser.add_argument("--model", choices=["ocsvm", "nn"], default="ocsvm",
-                        help="Detector to use: ocsvm (default) or nn (Nearest Neighbor Manhattan)")
     parser.add_argument("--runs",  type=int, default=1,
                         help="Number of evaluation runs to average (default: 1)")
     parser.add_argument("--fixed", action="store_true",
@@ -351,11 +297,11 @@ def main():
     user_b = input("Enter impostor user ID: ").strip()
 
     print(f"\n[Config] Model={user_a}  Impostor={user_b}  "
-          f"Detector={args.model.upper()}  Runs={args.runs}  "
+          f"Detector=OCSVM  Runs={args.runs}  "
           f"Fixed={'yes (seed=' + str(args.seed) + ')' if args.fixed else 'no'}")
 
     print()
-    model_a = load_model(user_a, args.model)
+    model_a = load_model(user_a)
 
     print(f"[Data] Extracting windows for impostor '{user_b}' from {BANK_DATA_DIR}/{user_b} ...")
     impostor_windows = extract_windows_for_user(
@@ -374,7 +320,7 @@ def main():
         args.runs, args.seed, args.fixed,
     )
 
-    print_results(all_run_results, args.runs, user_a, user_b, args.model)
+    print_results(all_run_results, args.runs, user_a, user_b)
 
 
 if __name__ == "__main__":

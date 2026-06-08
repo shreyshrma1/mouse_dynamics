@@ -1,25 +1,18 @@
 """
 train_from_existing_shen_scroll.py
 
-Identical to the original but accepts --data_dir and --save_dir arguments
-so it can train from any data collection directory without modifying the script.
+Trains a One-Class SVM for a single user from their bank collection sessions.
+All feature sets (holistic, scroll, more_scroll, dir_scroll) are always used.
 
-Defaults match the original bank collection behaviour:
+Defaults:
     data_dir = bank_collection/bank-data
     save_dir = checkpoints_shen_scroll_bank
 
-To train from collected_data:
-    python data_collection/train_from_existing_shen_scroll.py
-        --data_dir collected_data
-        --save_dir checkpoints_shen_scroll_collected
-
 Usage:
-    python data_collection/train_from_existing_shen_scroll.py
-    python data_collection/train_from_existing_shen_scroll.py --top_n 15
-    python data_collection/train_from_existing_shen_scroll.py
+    python shen_model/train_from_existing_shen_scroll.py
+    python shen_model/train_from_existing_shen_scroll.py --top_n 15
+    python shen_model/train_from_existing_shen_scroll.py
         --data_dir collected_data --save_dir checkpoints_shen_scroll_collected
-    python data_collection/train_from_existing_shen_scroll.py
-        --data_dir collected_data --save_dir checkpoints_shen_scroll_collected --top_n 15
 """
 
 print("importing sys and os")
@@ -72,7 +65,7 @@ SCROLL_COLS = [
     "scroll_burst_len_mean",
 ]
 
-ALL_FEATURE_COLS = HOLISTIC_COLS + SCROLL_COLS
+ALL_FEATURE_COLS = HOLISTIC_COLS + SCROLL_COLS  # extended by MORE_SCROLL_COLS + DIR_SCROLL_COLS at runtime
 
 # Top-N ranked features from permutation importance (feat_importance.py)
 RANKED_FEATURES = [
@@ -105,9 +98,7 @@ def parse_args():
                              f"(default: {DEFAULT_SAVE_DIR})")
     parser.add_argument("--top_n", type=int, default=None,
                         help="Use only the top-N ranked features (1-15). "
-                             "Omit to use all 48 features.")
-    parser.add_argument("--more_scroll", action="store_true")
-    parser.add_argument("--dir_scroll",  action="store_true")
+                             "Omit to use all features.")
     return parser.parse_args()
 
 
@@ -119,14 +110,13 @@ def get_session_files(user_dir):
     ])
 
 
-def extract_all_windows(session_files, user_id, feature_cols,
-                        more_scroll=False, dir_scroll=False):
+def extract_all_windows(session_files, user_id, feature_cols):
     all_vecs = []
     for path in session_files:
         print(f"  Processing {os.path.basename(path)}...")
         try:
             df = extract_session_features(path, user_id, window_size=WINDOW_SIZE,
-                                          more_scroll=more_scroll, dir_scroll=dir_scroll)
+                                          more_scroll=True, dir_scroll=True)
             if df.empty or not all(c in df.columns for c in feature_cols):
                 continue
             df = df.replace([np.inf, -np.inf], np.nan).dropna(subset=feature_cols)
@@ -155,10 +145,8 @@ def find_reference(train_samples):
 def main():
     args = parse_args()
 
-    data_dir    = args.data_dir
-    save_dir    = args.save_dir
-    more_scroll = args.more_scroll
-    dir_scroll  = args.dir_scroll
+    data_dir = args.data_dir
+    save_dir = args.save_dir
 
     print(f"[Config] data_dir={data_dir}  save_dir={save_dir}")
 
@@ -169,9 +157,7 @@ def main():
         print(f"Using top-{top_n} features: {feature_cols}")
     else:
         top_n = None
-        feature_cols = (ALL_FEATURE_COLS
-                        + (MORE_SCROLL_COLS if more_scroll else [])
-                        + (DIR_SCROLL_COLS  if dir_scroll  else []))
+        feature_cols = ALL_FEATURE_COLS + MORE_SCROLL_COLS + DIR_SCROLL_COLS
         print(f"Using all {len(feature_cols)} features")
 
     user_id = input("Enter user ID: ").strip()
@@ -184,8 +170,7 @@ def main():
     session_files = get_session_files(user_dir)
     print(f"Found {len(session_files)} session files for {user_id}")
 
-    all_vecs = extract_all_windows(session_files, user_id, feature_cols,
-                                   more_scroll=more_scroll, dir_scroll=dir_scroll)
+    all_vecs = extract_all_windows(session_files, user_id, feature_cols)
     if len(all_vecs) < 8:
         print(f"Not enough windows ({len(all_vecs)}) to train — collect more data")
         sys.exit(1)
@@ -233,8 +218,6 @@ def main():
         "nu":            NU,
         "gamma":         GAMMA,
         "window_size":   WINDOW_SIZE,
-        "more_scroll":   more_scroll,
-        "dir_scroll":    dir_scroll,
     }, os.path.join(save_path, "state.pkl"))
 
     print(f"Model saved to {save_path}/")

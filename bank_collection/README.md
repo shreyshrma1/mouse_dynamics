@@ -55,7 +55,5 @@ bank-app/
 
 - Any username/password works at signup; credentials are checked strictly at login.
 - Passwords are stored as SHA-256 hashes — never plaintext.
-- Checking accounts open with a random balance between $50–$400.
-- Savings accounts open with a random balance between $200–$1000.
 - Accounts can only be deleted if their balance is exactly $0.00.
 - Mouse data flushes to disk on logout and on tab close.
