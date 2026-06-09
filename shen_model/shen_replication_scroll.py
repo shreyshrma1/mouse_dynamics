@@ -60,10 +60,10 @@ FEATURE_COLS = HOLISTIC_COLS + SCROLL_COLS
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--nu",            type=float, default=0.06)
-    parser.add_argument("--gamma",         default="scale",
+    parser.add_argument("--nu", type=float, default=0.06)
+    parser.add_argument("--gamma", default="scale",
                         help="OCSVM gamma: float or 'scale' (default: scale)")
-    parser.add_argument("--window_size",   type=int,   default=50,
+    parser.add_argument("--window_size", type=int, default=50,
                         help="Actions per window (default: 50)")
     parser.add_argument("--held_out_frac", type=float, default=0.25,
                         help="Fraction of windows to hold out for testing (default: 0.25)")
@@ -144,33 +144,31 @@ def main():
         print(f"User: {user}")
         print(f"{'=' * 50}")
 
-        user_dir  = os.path.join(DATA_DIR, user)
+        user_dir = os.path.join(DATA_DIR, user)
         all_files = get_session_files(user_dir)
-        all_vecs  = extract_all_windows(all_files, user, args.window_size)
+        all_vecs = extract_all_windows(all_files, user, args.window_size)
 
         if len(all_vecs) < 8:
             print(f"  Not enough windows ({len(all_vecs)}), skipping")
             continue
 
         n_total = len(all_vecs)
-        n_test  = max(1, int(n_total * args.held_out_frac))
+        n_test = max(1, int(n_total * args.held_out_frac))
         n_train = n_total - n_test
 
         train_samples = np.array(all_vecs[:n_train])
-        test_samples  = np.array(all_vecs[n_train:])
+        test_samples = np.array(all_vecs[n_train:])
 
         print(f"  Total windows: {n_total}  |  Train: {n_train}  |  Test: {n_test}")
 
-        # ── Standardize: fit on training windows only ──────────────────────
         scaler = StandardScaler()
         train_scaled = scaler.fit_transform(train_samples)
 
-        # ── Shen distance preprocessing ────────────────────────────────────
-        reference   = find_reference(train_scaled)
+        reference = find_reference(train_scaled)
         train_dists = distance_vectors(train_scaled, reference)
-        dist_mean   = train_dists.mean(axis=0)
-        dist_std    = train_dists.std(axis=0)
-        train_norm  = normalize(train_dists, dist_mean, dist_std)
+        dist_mean = train_dists.mean(axis=0)
+        dist_std = train_dists.std(axis=0)
+        train_norm = normalize(train_dists, dist_mean, dist_std)
 
         model = OneClassSVM(kernel="rbf", nu=args.nu, gamma=gamma)
         model.fit(train_norm)
@@ -179,10 +177,10 @@ def main():
         print(f"  Train scores: min={train_scores.min():.4f}, "
               f"mean={train_scores.mean():.4f}, max={train_scores.max():.4f}")
 
-        legit_scores   = score_windows(test_samples, scaler, reference,
-                                       dist_mean, dist_std, model)
+        legit_scores = score_windows(test_samples, scaler, reference,
+                                     dist_mean, dist_std, model)
         legit_accepted = int(np.sum(legit_scores >= 0))
-        legit_scored   = len(legit_scores)
+        legit_scored = len(legit_scores)
 
         print(f"\n  Legitimate held-out ({legit_scored} windows):")
         print(f"    Scores: min={legit_scores.min():+.4f}, "
@@ -190,20 +188,20 @@ def main():
         print(f"    Accepted: {legit_accepted}/{legit_scored}")
 
         impostor_accepted = 0
-        impostor_scored   = 0
+        impostor_scored = 0
         all_impostor_scores = []
 
         for other_user in BALABIT_USERS:
             if other_user == user:
                 continue
             other_files = get_session_files(os.path.join(DATA_DIR, other_user))
-            other_vecs  = extract_all_windows(other_files, other_user, args.window_size)
-            imp_scores  = score_windows(other_vecs, scaler, reference,
-                                        dist_mean, dist_std, model)
+            other_vecs = extract_all_windows(other_files, other_user, args.window_size)
+            imp_scores = score_windows(other_vecs, scaler, reference,
+                                       dist_mean, dist_std, model)
             if len(imp_scores) == 0:
                 continue
-            impostor_scored        += len(imp_scores)
-            impostor_accepted      += int(np.sum(imp_scores >= 0))
+            impostor_scored += len(imp_scores)
+            impostor_accepted += int(np.sum(imp_scores >= 0))
             all_impostor_scores.extend(imp_scores.tolist())
 
         impostor_rejected = impostor_scored - impostor_accepted
@@ -216,8 +214,8 @@ def main():
         auc = roc_auc_score(all_labels, all_scores) \
               if len(np.unique(all_labels)) == 2 else float("nan")
 
-        frr = 1 - legit_accepted    / legit_scored    if legit_scored    > 0 else 0.0
-        far = impostor_accepted / impostor_scored      if impostor_scored > 0 else 0.0
+        frr = 1 - legit_accepted / legit_scored if legit_scored > 0 else 0.0
+        far = impostor_accepted / impostor_scored if impostor_scored > 0 else 0.0
         acc = (legit_accepted + impostor_rejected) / (legit_scored + impostor_scored) \
               if (legit_scored + impostor_scored) > 0 else 0.0
 
@@ -243,18 +241,18 @@ def main():
     mean_auc = sum(r["auc"] for r in all_results if not np.isnan(r["auc"])) \
                / sum(1 for r in all_results if not np.isnan(r["auc"]))
 
-    tla = sum(r["legit_accepted"]    for r in all_results)
-    tls = sum(r["legit_scored"]      for r in all_results)
+    tla = sum(r["legit_accepted"] for r in all_results)
+    tls = sum(r["legit_scored"] for r in all_results)
     tir = sum(r["impostor_rejected"] for r in all_results)
-    tis = sum(r["impostor_scored"]   for r in all_results)
+    tis = sum(r["impostor_scored"] for r in all_results)
 
     micro_all_scores = np.concatenate([r["all_scores"] for r in all_results])
     micro_all_labels = np.concatenate([r["all_labels"] for r in all_results])
     micro_auc = roc_auc_score(micro_all_labels, micro_all_scores) \
                 if len(np.unique(micro_all_labels)) == 2 else float("nan")
 
-    micro_frr = 1 - tla / tls          if tls > 0 else 0.0
-    micro_far = (tis - tir) / tis      if tis > 0 else 0.0
+    micro_frr = 1 - tla / tls if tls > 0 else 0.0
+    micro_far = (tis - tir) / tis if tis > 0 else 0.0
     micro_acc = (tla + tir) / (tls + tis) if (tls + tis) > 0 else 0.0
 
     print(f"\n{'=' * 62}")

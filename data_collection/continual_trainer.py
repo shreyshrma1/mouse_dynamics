@@ -1,5 +1,5 @@
 """
-continual_trainer_shen_scroll.py
+continual_trainer.py
 
 Continuously trains the Shen OCSVM model as new mouse data is collected.
 Called by MouseCollector after each session flush (every ~1 minute).
@@ -65,14 +65,14 @@ SCROLL_COLS = [
     "scroll_burst_count","scroll_burst_dur_mean","scroll_burst_len_mean",
 ]
 
-MIN_WINDOWS   = 8    # minimum windows in replay buffer before (re)training
+MIN_WINDOWS = 8    # minimum windows in replay buffer before (re)training
 EVAL_SESSIONS = 2    # number of sessions used for initial evaluation
 ACCEPT_THRESHOLD = 0.50  # minimum acceptance rate to pass evaluation
                           # set low (0.50) to account for 28% FRR on legitimate users
 
 # Mode constants
 MODE_EVALUATING = "EVALUATING"
-MODE_TRAINING   = "TRAINING"
+MODE_TRAINING = "TRAINING"
 
 
 class ContinualTrainerShenScroll:
@@ -87,35 +87,33 @@ class ContinualTrainerShenScroll:
         more_scroll=False,
         dir_scroll=False,
     ):
-        self.user_id     = user_id
-        self.save_dir    = save_dir
+        self.user_id = user_id
+        self.save_dir = save_dir
         self.window_size = window_size
-        self.nu          = nu
-        self.gamma       = gamma
+        self.nu = nu
+        self.gamma = gamma
         self.more_scroll = more_scroll
-        self.dir_scroll  = dir_scroll
+        self.dir_scroll = dir_scroll
 
         os.makedirs(save_dir, exist_ok=True)
 
-        self.buffer      = deque(maxlen=buffer_size)
-        self.model       = None
-        self.reference   = None
-        self.dist_mean   = None
-        self.dist_std    = None
-        self.n_sessions  = 0
+        self.buffer = deque(maxlen=buffer_size)
+        self.model = None
+        self.reference = None
+        self.dist_mean = None
+        self.dist_std = None
+        self.n_sessions = 0
 
         # Evaluation phase state
-        self.mode        = MODE_EVALUATING
+        self.mode = MODE_EVALUATING
         self.eval_buffer = []   # windows collected during evaluation (not yet in replay buffer)
         self.eval_scores = []   # per-window boolean: True = accepted, False = rejected
-
-    # ── Feature extraction ────────────────────────────────────────────────
 
     def _feature_cols(self):
         from measurements.extract_features_scroll import MORE_SCROLL_COLS, DIR_SCROLL_COLS
         return (FEATURE_COLS_HOLISTIC + SCROLL_COLS
                 + (MORE_SCROLL_COLS if self.more_scroll else [])
-                + (DIR_SCROLL_COLS  if self.dir_scroll  else []))
+                + (DIR_SCROLL_COLS if self.dir_scroll else []))
 
     def _extract_windows(self, session_path):
         from measurements.extract_features_scroll import extract_session_features
@@ -138,8 +136,6 @@ class ContinualTrainerShenScroll:
         except Exception as e:
             print(f"[Trainer] Extraction failed for {session_path}: {e}")
         return all_vecs
-
-    # ── Shen preprocessing ────────────────────────────────────────────────
 
     @staticmethod
     def _find_reference(train_samples):
@@ -164,18 +160,16 @@ class ContinualTrainerShenScroll:
         d = self._distance_vectors(np.array(vecs), self.reference)
         return self._normalize(d, self.dist_mean, self.dist_std)
 
-    # ── Training ──────────────────────────────────────────────────────────
-
     def _retrain(self):
         from sklearn.svm import OneClassSVM
 
         train_samples = np.array(list(self.buffer))
 
         self.reference = self._find_reference(train_samples)
-        train_dists    = self._distance_vectors(train_samples, self.reference)
+        train_dists = self._distance_vectors(train_samples, self.reference)
         self.dist_mean = train_dists.mean(axis=0)
-        self.dist_std  = train_dists.std(axis=0)
-        train_norm     = self._normalize(train_dists, self.dist_mean, self.dist_std)
+        self.dist_std = train_dists.std(axis=0)
+        train_norm = self._normalize(train_dists, self.dist_mean, self.dist_std)
 
         self.model = OneClassSVM(kernel="rbf", nu=self.nu, gamma=self.gamma)
         self.model.fit(train_norm)
@@ -185,16 +179,14 @@ class ContinualTrainerShenScroll:
               f"scores: min={scores.min():.4f}, mean={scores.mean():.4f}, "
               f"max={scores.max():.4f}")
 
-    # ── Evaluation phase logic ────────────────────────────────────────────
-
     def _score_windows(self, windows):
         """
         Score a list of windows against the current model.
         Returns (per_window_accepted: list[bool], mean_score: float).
         Requires model to be loaded (pre-trained model used during eval phase).
         """
-        x_norm  = self._preprocess(windows)
-        scores  = self.model.decision_function(x_norm)
+        x_norm = self._preprocess(windows)
+        scores = self.model.decision_function(x_norm)
         accepted = [float(s) >= 0 for s in scores]
         return accepted, float(scores.mean())
 
@@ -204,9 +196,9 @@ class ContinualTrainerShenScroll:
         Computes consensus acceptance rate over all eval windows and
         either transitions to TRAINING mode or terminates the program.
         """
-        total    = len(self.eval_scores)
+        total = len(self.eval_scores)
         n_accept = sum(self.eval_scores)
-        rate     = n_accept / total if total > 0 else 0.0
+        rate = n_accept / total if total > 0 else 0.0
 
         print(f"\n[Trainer] ── Evaluation complete ──────────────────────────")
         print(f"[Trainer]   Windows evaluated : {total}")
@@ -235,8 +227,6 @@ class ContinualTrainerShenScroll:
             print(f"\n[SECURITY ALERT] Impostor detected for user '{self.user_id}'.")
             print(f"[SECURITY ALERT] Session terminated.")
             sys.exit(1)
-
-    # ── Public interface ──────────────────────────────────────────────────
 
     def update(self, session_path):
         """
@@ -340,13 +330,11 @@ class ContinualTrainerShenScroll:
 
         accepted, mean_score = self._score_windows(windows)
         n_accept = sum(accepted)
-        verdict  = "ACCEPTED" if mean_score >= 0 else "REJECTED"
+        verdict = "ACCEPTED" if mean_score >= 0 else "REJECTED"
         print(f"[Trainer] Score: {mean_score:+.4f} → {verdict} "
               f"({n_accept}/{len(accepted)} windows accepted)")
 
         return mean_score, mean_score >= 0
-
-    # ── Persistence ───────────────────────────────────────────────────────
 
     def _save(self):
         path = os.path.join(self.save_dir, self.user_id)
@@ -356,17 +344,17 @@ class ContinualTrainerShenScroll:
             joblib.dump(self.model, os.path.join(path, "model.pkl"))
 
         joblib.dump({
-            "buffer":      list(self.buffer),
-            "reference":   self.reference,
-            "dist_mean":   self.dist_mean,
-            "dist_std":    self.dist_std,
-            "n_sessions":  self.n_sessions,
-            "nu":          self.nu,
-            "gamma":       self.gamma,
+            "buffer": list(self.buffer),
+            "reference": self.reference,
+            "dist_mean": self.dist_mean,
+            "dist_std": self.dist_std,
+            "n_sessions": self.n_sessions,
+            "nu": self.nu,
+            "gamma": self.gamma,
             "window_size": self.window_size,
             "more_scroll": self.more_scroll,
-            "dir_scroll":  self.dir_scroll,
-            "mode":        self.mode,
+            "dir_scroll": self.dir_scroll,
+            "mode": self.mode,
             "eval_buffer": self.eval_buffer,
             "eval_scores": self.eval_scores,
         }, os.path.join(path, "state.pkl"))
@@ -376,19 +364,19 @@ class ContinualTrainerShenScroll:
 
         try:
             state = joblib.load(os.path.join(path, "state.pkl"))
-            self.buffer      = deque(state["buffer"], maxlen=self.buffer.maxlen)
-            self.reference   = state.get("reference")
-            self.dist_mean   = state.get("dist_mean")
-            self.dist_std    = state.get("dist_std")
-            self.n_sessions  = state.get("n_sessions",  0)
-            self.nu          = state.get("nu",           self.nu)
-            self.gamma       = state.get("gamma",        self.gamma)
-            self.window_size = state.get("window_size",  self.window_size)
-            self.more_scroll = state.get("more_scroll",  self.more_scroll)
-            self.dir_scroll  = state.get("dir_scroll",   self.dir_scroll)
-            self.mode        = state.get("mode",         MODE_EVALUATING)
-            self.eval_buffer = state.get("eval_buffer",  [])
-            self.eval_scores = state.get("eval_scores",  [])
+            self.buffer = deque(state["buffer"], maxlen=self.buffer.maxlen)
+            self.reference = state.get("reference")
+            self.dist_mean = state.get("dist_mean")
+            self.dist_std = state.get("dist_std")
+            self.n_sessions = state.get("n_sessions", 0)
+            self.nu = state.get("nu", self.nu)
+            self.gamma = state.get("gamma", self.gamma)
+            self.window_size = state.get("window_size", self.window_size)
+            self.more_scroll = state.get("more_scroll", self.more_scroll)
+            self.dir_scroll = state.get("dir_scroll", self.dir_scroll)
+            self.mode = state.get("mode", MODE_EVALUATING)
+            self.eval_buffer = state.get("eval_buffer", [])
+            self.eval_scores = state.get("eval_scores", [])
             print(f"[Trainer] Loaded state: {self.n_sessions} sessions, "
                   f"{len(self.buffer)} windows in buffer, mode={self.mode}")
         except FileNotFoundError:
@@ -401,8 +389,6 @@ class ContinualTrainerShenScroll:
         except FileNotFoundError:
             print("[Trainer] No model found — evaluation phase will be skipped "
                   "until a model is available")
-
-    # ── Properties ────────────────────────────────────────────────────────
 
     @property
     def is_ready(self):
@@ -432,9 +418,9 @@ if __name__ == "__main__":
     if len(sys.argv) < 3:
         print("Usage: python continual_trainer_shen_scroll.py <user_id> <session1.csv> ...")
         sys.exit(1)
-    user_id  = sys.argv[1]
+    user_id = sys.argv[1]
     sessions = sys.argv[2:]
-    trainer  = ContinualTrainerShenScroll(user_id=user_id)
+    trainer = ContinualTrainerShenScroll(user_id=user_id)
     trainer.load()
     for s in sessions:
         trainer.update(s)

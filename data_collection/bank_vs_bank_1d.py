@@ -21,8 +21,6 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# ── Constants ─────────────────────────────────────────────────────────────────
-
 N_SETS       = 20
 SET_SIZE     = 10
 N_LEGIT      = N_SETS // 2
@@ -34,8 +32,6 @@ CHECKPOINT_DIR = "checkpoints_shen_scroll_bank"
 BANK_DATA_DIR  = "bank_collection/bank-data"
 WINDOW_SIZE   = 5
 
-
-# ── Model loading ─────────────────────────────────────────────────────────────
 
 def load_model(user_id):
     path = os.path.join(CHECKPOINT_DIR, user_id)
@@ -67,8 +63,6 @@ def load_model(user_id):
     }
 
 
-# ── Data extraction ───────────────────────────────────────────────────────────
-
 def extract_windows_for_user(user_id, feature_cols, more_scroll=False, dir_scroll=False):
     """Extract all windows from a user's bank session files."""
     from measurements.extract_features_scroll import extract_session_features
@@ -99,8 +93,6 @@ def extract_windows_for_user(user_id, feature_cols, more_scroll=False, dir_scrol
     return np.array(all_vecs) if all_vecs else np.empty((0, len(feature_cols)))
 
 
-# ── Preprocessing & scoring ───────────────────────────────────────────────────
-
 def preprocess(windows, m):
     """StandardScaler → Shen distance → normalize using model m's stats."""
     x = m["scaler"].transform(np.array(windows))
@@ -118,8 +110,6 @@ def score_windows(windows, m):
 def get_threshold(m):
     return 0.0  # OCSVM uses a fixed decision boundary of 0
 
-
-# ── Set generation ────────────────────────────────────────────────────────────
 
 def sample_contiguous_block(windows, rng):
     max_start = len(windows) - SET_SIZE
@@ -150,8 +140,6 @@ def generate_sets(target_user, legit_windows, impostor_user, impostor_windows, r
     return sets
 
 
-# ── Scoring & consensus ───────────────────────────────────────────────────────
-
 def score_set(set_dict, m, threshold):
     raw_scores      = score_windows(set_dict["windows"], m)
     sample_accepted = [float(s) >= threshold for s in raw_scores]
@@ -167,7 +155,6 @@ def per_sample_accuracy(sample_accepted, label):
     return correct / len(sample_accepted)
 
 
-# ── Metrics ───────────────────────────────────────────────────────────────────
 
 def compute_metrics(results, threshold):
     legit_results    = [r for r in results if r["label"] == "legitimate"]
@@ -192,8 +179,6 @@ def compute_sample_far_frr(results):
     ]) if impostor_results else 0.0
     return sample_far, sample_frr
 
-
-# ── Evaluation ────────────────────────────────────────────────────────────────
 
 def evaluate(target_user, target_model, impostor_user, impostor_windows,
              runs, base_seed, fixed):
@@ -241,8 +226,6 @@ def evaluate(target_user, target_model, impostor_user, impostor_windows,
     return all_run_results
 
 
-# ── Reporting ─────────────────────────────────────────────────────────────────
-
 def print_results(all_run_results, runs, user_a, user_b):
     sample_fars, sample_frrs = [], []
     thresh_fars = {t: [] for t in THRESHOLDS}
@@ -280,8 +263,6 @@ def print_results(all_run_results, runs, user_a, user_b):
             print(f"  {t:<12.1f} {thresh_fars[t][0]:>8.1%} {thresh_frrs[t][0]:>8.1%}{marker}")
     print()
 
-
-# ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser(description="Single-direction bank-vs-bank evaluation")

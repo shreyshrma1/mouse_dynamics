@@ -34,18 +34,13 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# ── Constants ─────────────────────────────────────────────────────────────────
-
 DEFAULT_SET_SIZE = 10
-DEFAULT_RUNS     = 50
-DEFAULT_SEED     = 42
+DEFAULT_RUNS = 50
+DEFAULT_SEED = 42
 
 CHECKPOINT_DIR = "checkpoints_shen_scroll_bank"
-BANK_DATA_DIR  = "bank_collection/bank-data"
-WINDOW_SIZE    = 5
-
-
-# ── Model loading ─────────────────────────────────────────────────────────────
+BANK_DATA_DIR = "bank_collection/bank-data"
+WINDOW_SIZE = 5
 
 def load_model(user_id):
     path = os.path.join(CHECKPOINT_DIR, user_id)
@@ -61,23 +56,21 @@ def load_model(user_id):
           f"features={len(state['feature_cols'])}, nu={state['nu']}, gamma={state['gamma']}")
 
     test_samples = state["test_samples"]
-    n_calib      = len(test_samples) // 2
+    n_calib = len(test_samples) // 2
 
     return {
-        "model":         model,
-        "scaler":        state["scaler"],
-        "reference":     state["reference"],
-        "dist_mean":     state["dist_mean"],
-        "dist_std":      state["dist_std"],
-        "feature_cols":  state["feature_cols"],
-        "more_scroll":   state.get("more_scroll", False),
-        "dir_scroll":    state.get("dir_scroll",  False),
+        "model": model,
+        "scaler": state["scaler"],
+        "reference": state["reference"],
+        "dist_mean": state["dist_mean"],
+        "dist_std": state["dist_std"],
+        "feature_cols": state["feature_cols"],
+        "more_scroll": state.get("more_scroll", False),
+        "dir_scroll": state.get("dir_scroll", False),
         "calib_samples": test_samples[:n_calib],
-        "eval_samples":  test_samples[n_calib:],
+        "eval_samples": test_samples[n_calib:],
     }
 
-
-# ── Data extraction ───────────────────────────────────────────────────────────
 
 def extract_windows_for_user(user_id, feature_cols, more_scroll=False, dir_scroll=False):
     from measurements.extract_features_scroll import extract_session_features
@@ -108,8 +101,6 @@ def extract_windows_for_user(user_id, feature_cols, more_scroll=False, dir_scrol
     return np.array(all_vecs) if all_vecs else np.empty((0, len(feature_cols)))
 
 
-# ── Preprocessing ─────────────────────────────────────────────────────────────
-
 def preprocess(windows, m):
     x = m["scaler"].transform(np.array(windows))
     x = np.abs(x - m["reference"])
@@ -117,65 +108,59 @@ def preprocess(windows, m):
     return x
 
 
-# ── Threshold calibration ─────────────────────────────────────────────────────
-
 def calibrate_threshold(m, set_size):
     calib = m["calib_samples"]
-    n     = len(calib)
+    n = len(calib)
 
     if n < set_size:
         print(f"[Warning] Only {n} calibration windows, fewer than set_size={set_size}. "
               f"Defaulting to 0.5.")
         return 0.5
 
-    x_norm     = preprocess(calib, m)
+    x_norm = preprocess(calib, m)
     raw_scores = m["model"].decision_function(x_norm)
-    accepted   = (raw_scores >= 0).astype(int)
+    accepted = (raw_scores >= 0).astype(int)
 
     acceptance_rates = []
     for start in range(n - set_size + 1):
         block = accepted[start:start + set_size]
         acceptance_rates.append(block.mean())
 
-    step      = 1.0 / set_size
-    min_rate  = min(acceptance_rates)
+    step = 1.0 / set_size
+    min_rate = min(acceptance_rates)
     threshold = max(0.0, min(1.0, min_rate - step))
     threshold = round(round(threshold / step) * step, 10)
     return threshold
 
-
-# ── Single authentication decision ───────────────────────────────────────────
 
 def authenticate(windows, m, threshold):
     """
     Make a single binary authentication decision for one block of windows.
     Returns True (accepted) or False (rejected).
     """
-    x_norm        = preprocess(windows, m)
-    raw_scores    = m["model"].decision_function(x_norm)
+    x_norm = preprocess(windows, m)
+    raw_scores = m["model"].decision_function(x_norm)
     accepted_rate = np.mean(raw_scores >= 0)
     return accepted_rate >= threshold
 
 
 def sample_block(windows, set_size, rng):
     max_start = len(windows) - set_size
-    start     = int(rng.integers(0, max_start + 1))
+    start = int(rng.integers(0, max_start + 1))
     return windows[start:start + set_size]
 
-
-# ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser(
         description="Simulate single-block deployment authentication")
-    parser.add_argument("--runs",     type=int, default=DEFAULT_RUNS,
+    parser.add_argument("--runs", type=int, default=DEFAULT_RUNS,
                         help=f"Number of simulated login attempts (default: {DEFAULT_RUNS})")
     parser.add_argument("--set_size", type=int, default=DEFAULT_SET_SIZE,
                         help=f"Number of windows per authentication decision "
                              f"(default: {DEFAULT_SET_SIZE})")
-    parser.add_argument("--fixed",    action="store_true",
+    parser.add_argument("--fixed", action="store_true",
                         help="Use fixed RNG seeds for reproducibility")
-    parser.add_argument("--seed",     type=int, default=DEFAULT_SEED)
+    parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     args = parser.parse_args()
 
     user_a = input("Enter model user ID (legitimate): ").strip()
@@ -210,8 +195,8 @@ def main():
     print(f"[Data] Legitimate eval: {len(legit_windows)} windows")
     print(f"[Data] Impostor '{user_b}': {len(impostor_windows)} windows")
 
-    legit_correct   = 0
-    impost_correct  = 0
+    legit_correct = 0
+    impost_correct = 0
 
     print(f"\n{'─' * 60}")
     print(f"  Simulated login attempts (set size = {args.set_size}, T = {threshold:.1f})")
@@ -219,23 +204,23 @@ def main():
 
     for run_idx in range(args.runs):
         seed = (args.seed + run_idx) if args.fixed else None
-        rng  = np.random.default_rng(seed)
+        rng = np.random.default_rng(seed)
 
-        legit_block   = sample_block(legit_windows,    args.set_size, rng)
-        impost_block  = sample_block(impostor_windows, args.set_size, rng)
+        legit_block = sample_block(legit_windows, args.set_size, rng)
+        impost_block = sample_block(impostor_windows, args.set_size, rng)
 
-        legit_verdict  = authenticate(legit_block,  model_a, threshold)
+        legit_verdict = authenticate(legit_block, model_a, threshold)
         impost_verdict = authenticate(impost_block, model_a, threshold)
 
-        legit_ok  = legit_verdict   # correct if accepted
+        legit_ok = legit_verdict   # correct if accepted
         impost_ok = not impost_verdict  # correct if rejected
 
         if legit_ok:
-            legit_correct  += 1
+            legit_correct += 1
         if impost_ok:
             impost_correct += 1
 
-        legit_str  = "ACCEPTED ✓" if legit_ok  else "REJECTED ✗"
+        legit_str = "ACCEPTED ✓" if legit_ok else "REJECTED ✗"
         impost_str = "REJECTED ✓" if impost_ok else "ACCEPTED ✗"
 
         print(f"  Run {run_idx + 1:>3}: "
@@ -243,7 +228,7 @@ def main():
               f"Impostor → {impost_str}")
 
     far = (args.runs - impost_correct) / args.runs
-    frr = (args.runs - legit_correct)  / args.runs
+    frr = (args.runs - legit_correct) / args.runs
 
     print(f"\n{'═' * 60}")
     print(f"  Results: {args.runs} runs, set size={args.set_size}, T={threshold:.1f}")

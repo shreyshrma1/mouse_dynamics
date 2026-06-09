@@ -95,8 +95,6 @@ DIR_SCROLL_COLS = [
     'scroll_down_burst_len_mean',
 ]
 
-# ── Data loading ───────────────────────────────────────────────────────────────
-
 def load_session(filepath):
     df = pd.read_csv(filepath, names=COLUMNS, header=None)
     df = df[df['record_timestamp'] != 'record_timestamp']
@@ -107,8 +105,6 @@ def load_session(filepath):
     df = df.reset_index(drop=True)
     return df
 
-
-# ── Scroll feature extraction ──────────────────────────────────────────────────
 
 def _dir_bursts(ts_arr):
     """Compute burst count, mean duration, mean length for a directional subset."""
@@ -156,17 +152,17 @@ def extract_scroll_features(raw_df, window_start_idx, window_end_idx,
     if scroll_count == 0 or total_events == 0:
         return zero
 
-    # ── Rate and ratio ─────────────────────────────────────────────────────
+    # Rate and ratio
     window_duration = (window_raw['client_timestamp'].iloc[-1]
                        - window_raw['client_timestamp'].iloc[0])
     scroll_rate  = scroll_count / window_duration if window_duration > 0 else 0.0
     scroll_ratio = scroll_count / total_events
 
-    # ── Direction (up/down by event count) ────────────────────────────────
+    # Direction (up/down by event count)
     up_count = (scrolls['state'] == 'Up').sum()
     scroll_up_ratio = up_count / scroll_count
 
-    # ── Inter-scroll intervals ─────────────────────────────────────────────
+    # Inter-scroll intervals
     ts = scrolls['client_timestamp'].values
     if scroll_count >= 2:
         gaps = np.diff(ts)
@@ -177,7 +173,7 @@ def extract_scroll_features(raw_df, window_start_idx, window_end_idx,
         scroll_dur_mean = 0.0
         scroll_dur_std  = 0.0
 
-    # ── Bursts ─────────────────────────────────────────────────────────────
+    # Bursts
     if scroll_count >= 2:
         bursts = []
         burst_start = 0
@@ -213,7 +209,7 @@ def extract_scroll_features(raw_df, window_start_idx, window_end_idx,
         'scroll_burst_len_mean': scroll_burst_len_mean,
     }
 
-    # ── deltaY features (--more_scroll only) ──────────────────────────────
+    # deltaY features (--more_scroll only)
     if more_scroll:
         dy = scrolls['y'].values.astype(float)
         dy_abs = np.abs(dy)
@@ -268,7 +264,7 @@ def extract_scroll_features(raw_df, window_start_idx, window_end_idx,
             'scroll_speed_intensity':   scroll_speed_intensity,
         })
 
-    # ── Directional burst features (--dir_scroll only) ────────────────────
+    # Directional burst features (--dir_scroll only)
     if dir_scroll:
         up_scrolls   = scrolls[scrolls['state'] == 'Up']
         down_scrolls = scrolls[scrolls['state'] == 'Down']
@@ -292,8 +288,6 @@ def extract_scroll_features(raw_df, window_start_idx, window_end_idx,
 
     return result
 
-
-# ── Segmentation ───────────────────────────────────────────────────────────────
 
 def segment_actions(df):
     actions = []
@@ -365,8 +359,6 @@ def split_mm_on_gaps(df, raw_offset=0):
     return actions
 
 
-# ── Time series computation ────────────────────────────────────────────────────
-
 def compute_time_series(events):
     x = events['x'].values.astype(float)
     y = events['y'].values.astype(float)
@@ -422,8 +414,6 @@ def compute_time_series(events):
             'theta': theta}
 
 
-# ── Individual feature computations ───────────────────────────────────────────
-
 def direction_8(dx, dy):
     angle = atan2(dy, dx) * 180 / pi
     angle = angle % 360
@@ -445,8 +435,6 @@ def a_beg_time(a, t):
             return t[k] - t[0]
     return t[-1] - t[0]
 
-
-# ── Per-action feature vector ──────────────────────────────────────────────────
 
 def extract_action_features(action_type, ts):
     x, y, t, s = ts['x'], ts['y'], ts['t'], ts['s']
@@ -517,8 +505,6 @@ def extract_action_features(action_type, ts):
     }
 
 
-# ── Session-level extraction ───────────────────────────────────────────────────
-
 def extract_session_features(filepath, user_id, window_size=None,
                               more_scroll=False, dir_scroll=False):
     """
@@ -579,8 +565,6 @@ def extract_user_features(user_dir, user_id, window_size=None,
         return pd.concat(all_rows, ignore_index=True)
     return pd.DataFrame()
 
-
-# ── Main ───────────────────────────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser(

@@ -35,10 +35,10 @@ print("done importing sklearn")
 # Defaults (original behaviour)
 DEFAULT_DATA_DIR = "bank_collection/bank-data"
 DEFAULT_SAVE_DIR = "checkpoints_shen_scroll_bank"
-WINDOW_SIZE      = 5
-NU               = 0.06
-GAMMA            = "scale"
-HELD_OUT_FRAC    = 0.25
+WINDOW_SIZE = 5
+NU = 0.06
+GAMMA = "scale"
+HELD_OUT_FRAC = 0.25
 
 HOLISTIC_COLS = [
     "type_of_action","traveled_distance_pixel","elapsed_time",
@@ -150,7 +150,6 @@ def main():
 
     print(f"[Config] data_dir={data_dir}  save_dir={save_dir}")
 
-    # Resolve feature columns
     if args.top_n is not None:
         top_n = max(1, min(args.top_n, len(RANKED_FEATURES)))
         feature_cols = RANKED_FEATURES[:top_n]
@@ -176,25 +175,24 @@ def main():
         sys.exit(1)
 
     n_total = len(all_vecs)
-    n_test  = max(1, int(n_total * HELD_OUT_FRAC))
+    n_test = max(1, int(n_total * HELD_OUT_FRAC))
     n_train = n_total - n_test
 
     train_samples = np.array(all_vecs[:n_train])
-    test_samples  = np.array(all_vecs[n_train:])
+    test_samples = np.array(all_vecs[n_train:])
 
     print(f"Total windows: {n_total}  |  Train: {n_train}  |  Held-out: {n_test}")
     print(f"Feature vector: {len(feature_cols)} features")
 
-    # StandardScaler + Shen distance preprocessing
     scaler = StandardScaler()
     train_scaled = scaler.fit_transform(train_samples)
 
-    reference   = find_reference(train_scaled)
+    reference = find_reference(train_scaled)
     train_dists = np.abs(train_scaled - reference)
-    dist_mean   = train_dists.mean(axis=0)
-    dist_std    = train_dists.std(axis=0)
-    std_safe    = np.where(dist_std < 1e-9, 1.0, dist_std)
-    train_norm  = (train_dists - dist_mean) / std_safe
+    dist_mean = train_dists.mean(axis=0)
+    dist_std = train_dists.std(axis=0)
+    std_safe = np.where(dist_std < 1e-9, 1.0, dist_std)
+    train_norm = (train_dists - dist_mean) / std_safe
 
     model = OneClassSVM(kernel="rbf", nu=NU, gamma=GAMMA)
     model.fit(train_norm)
@@ -206,18 +204,18 @@ def main():
     os.makedirs(save_path, exist_ok=True)
     joblib.dump(model, os.path.join(save_path, "model.pkl"))
     joblib.dump({
-        "reference":     reference,
-        "dist_mean":     dist_mean,
-        "dist_std":      dist_std,
-        "scaler":        scaler,
-        "test_samples":  test_samples,
-        "feature_cols":  feature_cols,
-        "top_n":         top_n,
-        "n_train":       n_train,
-        "n_test":        n_test,
-        "nu":            NU,
-        "gamma":         GAMMA,
-        "window_size":   WINDOW_SIZE,
+        "reference": reference,
+        "dist_mean": dist_mean,
+        "dist_std": dist_std,
+        "scaler": scaler,
+        "test_samples": test_samples,
+        "feature_cols": feature_cols,
+        "top_n": top_n,
+        "n_train": n_train,
+        "n_test": n_test,
+        "nu": NU,
+        "gamma": GAMMA,
+        "window_size": WINDOW_SIZE,
     }, os.path.join(save_path, "state.pkl"))
 
     print(f"Model saved to {save_path}/")

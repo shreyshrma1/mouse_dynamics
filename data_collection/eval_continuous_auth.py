@@ -43,22 +43,18 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# ── Constants ─────────────────────────────────────────────────────────────────
+N_SETS = 20
+SET_SIZE = 5
+N_LEGIT = N_SETS // 2
+N_IMPOSTOR = N_SETS // 2
+THRESHOLDS = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+DEFAULT_SEED = 42
 
-N_SETS        = 20
-SET_SIZE      = 5
-N_LEGIT       = N_SETS // 2
-N_IMPOSTOR    = N_SETS // 2
-THRESHOLDS    = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
-DEFAULT_SEED  = 42
-
-BANK_DATA_DIR  = "bank_collection/bank-data"
-IMPOSTOR_DIR   = "balabit_dataset/training_files"
+BANK_DATA_DIR = "bank_collection/bank-data"
+IMPOSTOR_DIR = "balabit_dataset/training_files"
 CHECKPOINT_DIR = "checkpoints_shen_scroll_bank"
-WINDOW_SIZE    = 5
+WINDOW_SIZE = 5
 
-
-# ── Data loading ──────────────────────────────────────────────────────────────
 
 def get_session_files(user_dir):
     if not os.path.isdir(user_dir):
@@ -104,8 +100,6 @@ def extract_windows_for_user(user_dir, user_id, feature_cols,
     return np.array(all_vecs) if all_vecs else np.empty((0, len(feature_cols)))
 
 
-# ── Model loading ─────────────────────────────────────────────────────────────
-
 def load_model(user_id):
     path = os.path.join(CHECKPOINT_DIR, user_id)
     try:
@@ -128,12 +122,10 @@ def load_model(user_id):
         state["dist_std"],
         state["feature_cols"],
         state.get("more_scroll", False),
-        state.get("dir_scroll",  False),
+        state.get("dir_scroll", False),
         state["test_samples"],   # held-out windows, never seen during training
     )
 
-
-# ── Preprocessing ─────────────────────────────────────────────────────────────
 
 def preprocess(windows, scaler, reference, dist_mean, dist_std):
     """StandardScaler → Shen distance → normalize, matching evaluate_shen_scroll.py."""
@@ -142,8 +134,6 @@ def preprocess(windows, scaler, reference, dist_mean, dist_std):
     x = (x - dist_mean) / np.where(dist_std < 1e-9, 1.0, dist_std)
     return x
 
-
-# ── Set generation ────────────────────────────────────────────────────────────
 
 def sample_contiguous_block(windows, rng):
     max_start = len(windows) - SET_SIZE
@@ -166,10 +156,10 @@ def generate_sets(target_user, legit_windows, impostor_pool, rng):
     for i in range(N_LEGIT):
         block, start = sample_contiguous_block(legit_windows, rng)
         sets.append({
-            "set_id":  i + 1,
-            "label":   "legitimate",
-            "user":    target_user,
-            "start":   start,
+            "set_id": i + 1,
+            "label": "legitimate",
+            "user": target_user,
+            "start": start,
             "windows": block,
         })
 
@@ -177,21 +167,19 @@ def generate_sets(target_user, legit_windows, impostor_pool, rng):
         imp_user = impostor_users[int(rng.integers(0, len(impostor_users)))]
         block, start = sample_contiguous_block(impostor_pool[imp_user], rng)
         sets.append({
-            "set_id":  N_LEGIT + i + 1,
-            "label":   "impostor",
-            "user":    imp_user,
-            "start":   start,
+            "set_id": N_LEGIT + i + 1,
+            "label": "impostor",
+            "user": imp_user,
+            "start": start,
             "windows": block,
         })
 
     return sets
 
 
-# ── Scoring & consensus ───────────────────────────────────────────────────────
-
 def score_set(set_dict, model, scaler, reference, dist_mean, dist_std):
     x_norm = preprocess(set_dict["windows"], scaler, reference, dist_mean, dist_std)
-    raw_scores      = model.decision_function(x_norm)
+    raw_scores = model.decision_function(x_norm)
     sample_accepted = [float(s) >= 0 for s in raw_scores]
     return raw_scores, sample_accepted
 
@@ -208,15 +196,13 @@ def per_sample_accuracy(sample_accepted, label):
     return correct / len(sample_accepted)
 
 
-# ── Metrics ───────────────────────────────────────────────────────────────────
-
 def compute_metrics(results, threshold):
     """
     FAR  = impostor sets incorrectly accepted / total impostor sets
     FRR  = legitimate sets incorrectly rejected / total legitimate sets
     Both are reported as fractions (multiply by 100 for %).
     """
-    legit_results    = [r for r in results if r["label"] == "legitimate"]
+    legit_results = [r for r in results if r["label"] == "legitimate"]
     impostor_results = [r for r in results if r["label"] == "impostor"]
 
     # A legitimate set is incorrectly rejected if consensus verdict is reject
@@ -237,7 +223,7 @@ def compute_sample_far_frr(results):
     FAR and FRR at the individual window level (before consensus),
     averaged across all sets of the relevant type.
     """
-    legit_results    = [r for r in results if r["label"] == "legitimate"]
+    legit_results = [r for r in results if r["label"] == "legitimate"]
     impostor_results = [r for r in results if r["label"] == "impostor"]
 
     # Per-window FRR: fraction of legitimate windows rejected
@@ -255,14 +241,11 @@ def compute_sample_far_frr(results):
     return sample_far, sample_frr
 
 
-# ── Reporting ─────────────────────────────────────────────────────────────────
-
 def print_results(results, runs=1):
     """
     Print per-set table and summary. If runs > 1, results is a list of
     run-result lists and metrics are averaged across runs.
     """
-    # For multi-run mode, print summary only (per-set table doesn't aggregate cleanly)
     if runs == 1:
         _print_per_set_table(results[0])
         _print_summary(results[0])
@@ -295,7 +278,7 @@ def _print_per_set_table(results):
 
 
 def _print_summary(results):
-    legit_results    = [r for r in results if r["label"] == "legitimate"]
+    legit_results = [r for r in results if r["label"] == "legitimate"]
     impostor_results = [r for r in results if r["label"] == "impostor"]
 
     sample_far, sample_frr = compute_sample_far_frr(results)
@@ -318,7 +301,6 @@ def _print_summary(results):
         marker = " ◄" if t == 0.5 else ""
         print(f"  {t:<12.1f} {far:>8.1%} {frr:>8.1%}{marker}")
 
-    # Majority vote (T=0.5) callout
     far_maj, frr_maj = compute_metrics(results, 0.5)
     print(f"\nMajority vote (T=0.5):  FAR={far_maj:.1%}  FRR={frr_maj:.1%}\n")
 
@@ -326,8 +308,8 @@ def _print_summary(results):
 def _print_averaged_summary(all_run_results, runs):
     """Average FAR/FRR across multiple runs."""
     sample_fars, sample_frrs = [], []
-    thresh_fars  = {t: [] for t in THRESHOLDS}
-    thresh_frrs  = {t: [] for t in THRESHOLDS}
+    thresh_fars = {t: [] for t in THRESHOLDS}
+    thresh_frrs = {t: [] for t in THRESHOLDS}
 
     for results in all_run_results:
         sf, sr = compute_sample_far_frr(results)
@@ -351,8 +333,6 @@ def _print_averaged_summary(all_run_results, runs):
               f"{np.mean(thresh_frrs[t]):>10.1%} {np.std(thresh_frrs[t]):>9.1%}{marker}")
 
 
-# ── Single-user evaluation ────────────────────────────────────────────────────
-
 def evaluate_user(user_id, legit_windows, impostor_pool, model_artifacts, runs, base_seed, fixed):
     """
     Run the full evaluation for one user. Returns list of run-result lists.
@@ -362,10 +342,7 @@ def evaluate_user(user_id, legit_windows, impostor_pool, model_artifacts, runs, 
     all_run_results = []
 
     for run_idx in range(runs):
-        if fixed:
-            seed = base_seed + run_idx
-        else:
-            seed = None
+        seed = base_seed + run_idx if fixed else None
         rng = np.random.default_rng(seed)
 
         sets = generate_sets(user_id, legit_windows, impostor_pool, rng)
@@ -375,11 +352,11 @@ def evaluate_user(user_id, legit_windows, impostor_pool, model_artifacts, runs, 
             raw_scores, sample_accepted = score_set(
                 s, model, scaler, reference, dist_mean, dist_std
             )
-            sample_acc       = per_sample_accuracy(sample_accepted, s["label"])
+            sample_acc = per_sample_accuracy(sample_accepted, s["label"])
             majority_verdict = consensus_verdict(sample_accepted, threshold=0.5)
             majority_correct = (majority_verdict == (s["label"] == "legitimate"))
 
-            consensus         = {t: consensus_verdict(sample_accepted, t) for t in THRESHOLDS}
+            consensus = {t: consensus_verdict(sample_accepted, t) for t in THRESHOLDS}
             consensus_correct = {
                 t: (consensus[t] == (s["label"] == "legitimate"))
                 for t in THRESHOLDS
@@ -387,12 +364,12 @@ def evaluate_user(user_id, legit_windows, impostor_pool, model_artifacts, runs, 
 
             results.append({
                 **s,
-                "raw_scores":        raw_scores,
-                "sample_accepted":   sample_accepted,
-                "sample_acc":        sample_acc,
-                "majority_verdict":  majority_verdict,
-                "majority_correct":  majority_correct,
-                "consensus":         consensus,
+                "raw_scores": raw_scores,
+                "sample_accepted": sample_accepted,
+                "sample_acc": sample_acc,
+                "majority_verdict": majority_verdict,
+                "majority_correct": majority_correct,
+                "consensus": consensus,
                 "consensus_correct": consensus_correct,
             })
 
@@ -401,21 +378,19 @@ def evaluate_user(user_id, legit_windows, impostor_pool, model_artifacts, runs, 
     return all_run_results
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
-
 def main():
     parser = argparse.ArgumentParser(description="Continuous auth evaluation")
-    parser.add_argument("--user",      default=None,
+    parser.add_argument("--user", default=None,
                         help="Target user ID (must exist in bank-data/). "
                              "Omit if using --all_users.")
     parser.add_argument("--all_users", action="store_true",
                         help="Evaluate every user found in bank-data/ and report aggregate metrics.")
-    parser.add_argument("--fixed",     action="store_true",
+    parser.add_argument("--fixed", action="store_true",
                         help="Use a fixed RNG seed for reproducible sets.")
-    parser.add_argument("--seed",      type=int, default=DEFAULT_SEED,
+    parser.add_argument("--seed", type=int, default=DEFAULT_SEED,
                         help=f"Base RNG seed (only used with --fixed, default={DEFAULT_SEED}). "
                              f"For multi-run, each run uses seed+run_index.")
-    parser.add_argument("--runs",      type=int, default=1,
+    parser.add_argument("--runs", type=int, default=1,
                         help="Repeat evaluation N times and average metrics. "
                              "Reduces variance from a single sampling draw. (default: 1)")
     args = parser.parse_args()
@@ -424,7 +399,6 @@ def main():
         print("[Error] Provide --user <id> or --all_users.")
         sys.exit(1)
 
-    # Determine which users to evaluate
     if args.all_users:
         users = sorted([
             d for d in os.listdir(BANK_DATA_DIR)
@@ -436,10 +410,7 @@ def main():
         print(f"[Config] User={args.user}  Runs={args.runs}  "
               f"Fixed={'yes (seed=' + str(args.seed) + ')' if args.fixed else 'no'}")
 
-    # Pre-load impostor pool (shared across all target users)
     print(f"[Data] Loading impostor data from {IMPOSTOR_DIR} ...")
-    # Feature cols determined per-user from their model; we load impostors lazily per user
-    # to ensure the correct feature set is used. Store raw dirs here.
     impostor_user_dirs = {
         u: os.path.join(IMPOSTOR_DIR, u)
         for u in sorted(os.listdir(IMPOSTOR_DIR))
@@ -447,7 +418,6 @@ def main():
     }
     print(f"[Data] {len(impostor_user_dirs)} impostor user directories found.")
 
-    # Per-user evaluation
     aggregate_fars = {t: [] for t in THRESHOLDS}
     aggregate_frrs = {t: [] for t in THRESHOLDS}
 
@@ -456,7 +426,6 @@ def main():
         print(f"  Evaluating: {user_id}")
         print(f"{'═' * 60}")
 
-        # Load model and held-out test windows for this user
         (model, scaler, reference, dist_mean,
          dist_std, feature_cols, more_scroll, dir_scroll,
          test_samples) = load_model(user_id)
@@ -472,7 +441,6 @@ def main():
             continue
         print(f"[Data] Legitimate (held-out only): {len(legit_windows)} windows")
 
-        # Load impostor windows using this user's feature cols
         impostor_pool = {}
         for imp_user, imp_dir in impostor_user_dirs.items():
             imp_windows = extract_windows_for_user(
@@ -490,7 +458,6 @@ def main():
 
         print_results(all_run_results, runs=args.runs)
 
-        # Accumulate for aggregate report
         if args.all_users:
             for results in all_run_results:
                 for t in THRESHOLDS:
@@ -498,7 +465,6 @@ def main():
                     aggregate_fars[t].append(far)
                     aggregate_frrs[t].append(frr)
 
-    # Aggregate report across all users
     if args.all_users and len(users) > 1:
         print(f"\n{'═' * 60}")
         print(f"  Aggregate across all users ({len(users)} users, {args.runs} run(s) each)")
